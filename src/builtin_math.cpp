@@ -74,7 +74,7 @@ static int parse_cmd_opts(math_cmd_opts_t &opts, int *optind,  //!OCLINT(high nc
 
 // We read from stdin if we are the second or later process in a pipeline.
 static bool math_args_from_stdin(const io_streams_t &streams) {
-    return streams.stdin_is_directly_redirected;
+    return streams.in.is_redirected();
 }
 
 /// Get the arguments from stdin.
@@ -82,7 +82,7 @@ static const wchar_t *math_get_arg_stdin(wcstring *storage, const io_streams_t &
     std::string arg;
     for (;;) {
         char ch = '\0';
-        long rc = read_blocked(streams.stdin_fd, &ch, 1);
+        long rc = read_blocked(streams.in.fd, &ch, 1);
 
         if (rc < 0) return NULL;  // failure
 

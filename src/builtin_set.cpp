@@ -458,7 +458,7 @@ static int builtin_set_list(const wchar_t *cmd, set_cmd_opts_t &opts, int argc, 
                 streams.out.append(L" ");
                 streams.out.append(val);
 
-                if (shorten) streams.out.push_back(ellipsis_char);
+                if (shorten) streams.out.append(ellipsis_char);
             }
         }
 
@@ -561,7 +561,7 @@ static int builtin_set_show(const wchar_t *cmd, set_cmd_opts_t &opts, int argc, 
             show_scope(it.c_str(), ENV_LOCAL, streams);
             show_scope(it.c_str(), ENV_GLOBAL, streams);
             show_scope(it.c_str(), ENV_UNIVERSAL, streams);
-            streams.out.push_back(L'\n');
+            streams.out.append(L'\n');
         }
     } else {
         for (int i = 0; i < argc; i++) {
@@ -582,7 +582,7 @@ static int builtin_set_show(const wchar_t *cmd, set_cmd_opts_t &opts, int argc, 
             show_scope(arg, ENV_LOCAL, streams);
             show_scope(arg, ENV_GLOBAL, streams);
             show_scope(arg, ENV_UNIVERSAL, streams);
-            streams.out.push_back(L'\n');
+            streams.out.append(L'\n');
         }
     }
 

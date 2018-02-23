@@ -79,7 +79,7 @@ struct block_t {
     /// Status for the current loop block. Can be any of the values from the loop_status enum.
     enum loop_status_t loop_status { LOOP_NORMAL };
     /// The job that is currently evaluated in the specified block.
-    shared_ptr<job_t> job{};
+    std::shared_ptr<job_t> job{};
     /// Name of file that created this block. This string is intern'd.
     const wchar_t *src_filename{nullptr};
     /// Line number where this block was created.
@@ -193,7 +193,7 @@ class parser_t {
     parser_t &operator=(const parser_t &);
 
     /// Adds a job to the beginning of the job list.
-    void job_add(shared_ptr<job_t> job);
+    void job_add(std::shared_ptr<job_t> job);
 
     /// Returns the name of the currently evaluated function if we are currently evaluating a
     /// function, null otherwise. This is tested by moving down the block-scope-stack, checking

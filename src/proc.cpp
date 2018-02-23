@@ -357,15 +357,6 @@ job_t::job_t(job_id_t jobid, io_chain_t bio)
 
 job_t::~job_t() { release_job_id(job_id); }
 
-/// Return all the IO redirections. Start with the block IO, then walk over the processes.
-io_chain_t job_t::all_io_redirections() const {
-    io_chain_t result = this->block_io;
-    for (const process_ptr_t &p : this->processes) {
-        result.append(p->io_chain());
-    }
-    return result;
-}
-
 typedef unsigned int process_generation_count_t;
 
 /// A static value tracking how many SIGCHLDs we have seen. This is only ever modified from within

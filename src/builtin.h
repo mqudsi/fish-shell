@@ -7,10 +7,10 @@
 #include <vector>
 
 #include "common.h"
+#include "io.h"
 
 class completion_t;
 class parser_t;
-class output_stream_t;
 struct io_streams_t;
 
 /// Data structure to describe a builtin.
@@ -105,7 +105,7 @@ class builtin_commandline_scoped_transient_t {
 wcstring builtin_help_get(parser_t &parser, const wchar_t *cmd);
 
 void builtin_print_help(parser_t &parser, io_streams_t &streams, const wchar_t *cmd,
-                        output_stream_t &b);
+                        io_stream_t &b);
 int builtin_count_args(const wchar_t *const *argv);
 
 void builtin_unknown_option(parser_t &parser, io_streams_t &streams, const wchar_t *cmd,

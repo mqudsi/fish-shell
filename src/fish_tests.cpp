@@ -3989,7 +3989,7 @@ static void run_one_string_test(const wchar_t **argv, int expected_rc,
                                 const wchar_t *expected_out) {
     parser_t parser;
     io_streams_t streams(0);
-    streams.stdin_is_directly_redirected = false;  // read from argv instead of stdin
+    streams.in.is_redirected() = false;  // read from argv instead of stdin
     int rc = builtin_string(parser, streams, const_cast<wchar_t **>(argv));
     wcstring args;
     for (int i = 0; argv[i] != NULL; i++) {

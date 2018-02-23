@@ -457,21 +457,21 @@ static bool exec_internal_builtin_proc(parser_t &parser, job_t *j, process_t *p,
     if (local_builtin_stdin == -1) return false;
 
     // Determine if we have a "direct" redirection for stdin.
-    bool stdin_is_directly_redirected;
+    bool stdin.is_redirected();
     if (!p->is_first_in_job) {
         // We must have a pipe
-        stdin_is_directly_redirected = true;
+        stdin.is_redirected() = true;
     } else {
         // We are not a pipe. Check if there is a redirection local to the process
         // that's not IO_CLOSE.
         const shared_ptr<const io_data_t> stdin_io = io_chain_get(p->io_chain(), STDIN_FILENO);
-        stdin_is_directly_redirected = stdin_io && stdin_io->io_mode != IO_CLOSE;
+        stdin.is_redirected() = stdin_io && stdin_io->io_mode != IO_CLOSE;
     }
 
-    streams.stdin_fd = local_builtin_stdin;
+    streams.in_fd = local_builtin_stdin;
     streams.out_is_redirected = has_fd(proc_io_chain, STDOUT_FILENO);
     streams.err_is_redirected = has_fd(proc_io_chain, STDERR_FILENO);
-    streams.stdin_is_directly_redirected = stdin_is_directly_redirected;
+    streams.in.is_redirected() = stdin.is_redirected();
     streams.io_chain = &proc_io_chain;
 
     // Since this may be the foreground job, and since a builtin may execute another
@@ -521,6 +521,11 @@ void exec_job(parser_t &parser, job_t *j) {
     bool needs_keepalive = false;
     process_t keepalive;
 
+    // Store the last output pipe here as a static variable
+    // This lets nested jobs/blocks read/write output/input from/to other jobs
+    // When pipe_prev is nullptr, input is read from tty STDIN
+    static io_stream_t *pipe_prev = nullptr;
+
     CHECK(j, );
     CHECK_BLOCK();
 
@@ -530,21 +535,6 @@ void exec_job(parser_t &parser, job_t *j) {
     }
 
     debug(4, L"Exec job '%ls' with id %d", j->command_wcstr(), j->job_id);
-
-    // Verify that all IO_BUFFERs are output. We used to support a (single, hacked-in) magical input
-    // IO_BUFFER used by fish_pager, but now the claim is that there are no more clients and it is
-    // removed. This assertion double-checks that.
-    size_t stdout_read_limit = 0;
-    const io_chain_t all_ios = j->all_io_redirections();
-    for (size_t idx = 0; idx < all_ios.size(); idx++) {
-        const shared_ptr<io_data_t> &io = all_ios.at(idx);
-
-        if ((io->io_mode == IO_BUFFER)) {
-            io_buffer_t *io_buffer = static_cast<io_buffer_t *>(io.get());
-            assert(!io_buffer->is_input);
-            stdout_read_limit = io_buffer->get_buffer_limit();
-        }
-    }
 
     if (j->processes.front()->type == INTERNAL_EXEC) {
         internal_exec(j, std::move(all_ios));

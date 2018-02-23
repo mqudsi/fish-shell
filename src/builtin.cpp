@@ -169,7 +169,7 @@ wcstring builtin_help_get(parser_t &parser, io_streams_t &streams, const wchar_t
     wcstring out;
     const wcstring name_esc = escape_string(name, 1);
     wcstring cmd = format_string(L"__fish_print_help %ls", name_esc.c_str());
-    if (!streams.out_is_redirected && isatty(STDOUT_FILENO)) {
+    if (!streams.out.is_redirected() && streams.out.is_tty()) {
         // since we're using a subshell, __fish_print_help can't tell we're in
         // a terminal. Tell it ourselves.
         int cols = common_get_width();
@@ -191,7 +191,7 @@ wcstring builtin_help_get(parser_t &parser, io_streams_t &streams, const wchar_t
 /// to an interactive screen, it may be shortened to fit the screen.
 ///
 void builtin_print_help(parser_t &parser, io_streams_t &streams, const wchar_t *cmd,
-                        output_stream_t &b) {
+                        io_stream_t &b) {
     bool is_stderr = &b == &streams.err;
     if (is_stderr) {
         b.append(parser.current_line());

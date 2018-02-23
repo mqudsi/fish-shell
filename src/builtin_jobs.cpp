@@ -166,7 +166,7 @@ int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
         const job_t *j;
         while ((j = jobs.next())) {
             if ((j->flags & JOB_CONSTRUCTED) && !job_is_completed(j)) {
-                builtin_jobs_print(j, mode, !streams.out_is_redirected, streams);
+                builtin_jobs_print(j, mode, !streams.out.is_redirected(), streams);
                 return STATUS_CMD_ERROR;
             }
         }
@@ -198,7 +198,7 @@ int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             while ((j = jobs.next())) {
                 // Ignore unconstructed jobs, i.e. ourself.
                 if ((j->flags & JOB_CONSTRUCTED) && !job_is_completed(j)) {
-                    builtin_jobs_print(j, mode, !found && !streams.out_is_redirected, streams);
+                    builtin_jobs_print(j, mode, !found && !streams.out.is_redirected(), streams);
                     found = 1;
                 }
             }
@@ -207,7 +207,7 @@ int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
 
     if (!found) {
         // Do not babble if not interactive.
-        if (!streams.out_is_redirected) {
+        if (!streams.out.is_redirected()) {
             streams.out.append_format(_(L"%ls: There are no jobs\n"), argv[0]);
         }
         return STATUS_CMD_ERROR;

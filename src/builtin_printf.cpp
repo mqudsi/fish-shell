@@ -216,7 +216,7 @@ void builtin_printf_state_t::append_output(wchar_t c) {
     // Don't output if we're done.
     if (early_exit) return;
 
-    streams.out.push_back(c);
+    streams.out.append(c);
 }
 
 void builtin_printf_state_t::append_output(const wchar_t *c) {

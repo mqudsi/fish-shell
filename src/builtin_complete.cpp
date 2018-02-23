@@ -346,10 +346,10 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
 
                 // Append any description.
                 if (!next.description.empty()) {
-                    streams.out.push_back(L'\t');
+                    streams.out.append(L'\t');
                     streams.out.append(next.description);
                 }
-                streams.out.push_back(L'\n');
+                streams.out.append(L'\n');
             }
 
             recursion_level--;

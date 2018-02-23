@@ -37,7 +37,7 @@ static void print_colors(io_streams_t &streams) {
     size_t i;
     for (i = 0; i < result.size(); i++) {
         streams.out.append(result.at(i));
-        streams.out.push_back(L'\n');
+        streams.out.append(L'\n');
     }
 }
 

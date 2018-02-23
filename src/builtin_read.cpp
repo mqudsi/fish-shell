@@ -419,18 +419,18 @@ int builtin_read(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
     if (retval != STATUS_CMD_OK) return retval;
 
     // TODO: Determine if the original set of conditions for interactive reads should be reinstated:
-    // if (isatty(0) && streams.stdin_fd == STDIN_FILENO && !split_null) {
-    int stream_stdin_is_a_tty = isatty(streams.stdin_fd);
+    // if (isatty(0) && streams.in.fd == STDIN_FILENO && !split_null) {
+    int stream_stdin_is_a_tty = isatty(streams.in.fd);
     if (stream_stdin_is_a_tty && !opts.split_null) {
         // We should read interactively using reader_readline(). This does not support splitting on
         // null.
         exit_res = read_interactive(buff, opts.nchars, opts.shell, opts.silent, opts.prompt,
                                     opts.right_prompt, opts.commandline);
     } else if (!opts.nchars && !stream_stdin_is_a_tty &&
-               lseek(streams.stdin_fd, 0, SEEK_CUR) != -1) {
-        exit_res = read_in_chunks(streams.stdin_fd, buff, opts.split_null);
+               lseek(streams.in.fd, 0, SEEK_CUR) != -1) {
+        exit_res = read_in_chunks(streams.in.fd, buff, opts.split_null);
     } else {
-        exit_res = read_one_char_at_a_time(streams.stdin_fd, buff, opts.nchars, opts.split_null);
+        exit_res = read_one_char_at_a_time(streams.in.fd, buff, opts.nchars, opts.split_null);
     }
 
     if (exit_res != STATUS_CMD_OK) {

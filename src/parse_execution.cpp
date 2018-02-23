@@ -324,7 +324,7 @@ parse_execution_result_t parse_execution_context_t::run_function_statement(
     if (result != parse_execution_success) {
         return result;
     }
-    io_streams_t streams(0);  // no limit on the amount of output from builtin_function()
+    io_streams_t streams;  // no limit on the amount of output from builtin_function()
     int err = builtin_function(*parser, streams, arguments, pstree, body);
     proc_set_last_status(err);
 

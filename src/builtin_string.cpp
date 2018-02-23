@@ -47,7 +47,8 @@ static void string_error(io_streams_t &streams, const wchar_t *fmt, ...) {
     streams.err.append(L"string ");
     va_list va;
     va_start(va, fmt);
-    streams.err.append_formatv(fmt, va);
+    //TODO
+    //streams.err.append_formatv(fmt, va);
     va_end(va);
 }
 
@@ -59,7 +60,7 @@ static void string_unknown_option(parser_t &parser, io_streams_t &streams, const
 
 // We read from stdin if we are the second or later process in a pipeline.
 static bool string_args_from_stdin(const io_streams_t &streams) {
-    return streams.stdin_is_directly_redirected;
+    return streams.in.is_redirected();
 }
 
 static const wchar_t *string_get_arg_argv(int *argidx, const wchar_t *const *argv) {
@@ -86,7 +87,7 @@ class arg_iterator_t {
         size_t pos;
         while ((pos = buffer_.find('\n')) == std::string::npos) {
             char buf[STRING_CHUNK_SIZE];
-            long n = read_blocked(streams_.stdin_fd, buf, STRING_CHUNK_SIZE);
+            long n = read_blocked(streams_.stdin.fd, buf, STRING_CHUNK_SIZE);
             if (n == 0) {
                 // If we still have buffer contents, flush them,
                 // in case there was no trailing '\n'.
@@ -646,7 +647,7 @@ static int string_join(parser_t &parser, io_streams_t &streams, int argc, wchar_
         nargs++;
     }
     if (nargs > 0 && !opts.quiet) {
-        streams.out.push_back(L'\n');
+        streams.out.append(L'\n');
     }
 
     return nargs > 1 ? STATUS_CMD_OK : STATUS_CMD_ERROR;
@@ -800,7 +801,7 @@ class pcre2_matcher_t : public string_matcher_t {
                     streams.out.append_format(L"1 %lu\n", wcslen(arg));
                 } else {
                     streams.out.append(arg);
-                    streams.out.push_back(L'\n');
+                    streams.out.append(L'\n');
                 }
             }
 
@@ -819,7 +820,7 @@ class pcre2_matcher_t : public string_matcher_t {
 
         if (opts.entire) {
             streams.out.append(arg);
-            streams.out.push_back(L'\n');
+            streams.out.append(L'\n');
         }
 
         PCRE2_SIZE *ovector = pcre2_get_ovector_pointer(regex.match);
@@ -835,7 +836,7 @@ class pcre2_matcher_t : public string_matcher_t {
                     // May have end < begin if \K is used.
                     streams.out.append(wcstring(&arg[begin], end - begin));
                 }
-                streams.out.push_back(L'\n');
+                streams.out.append(L'\n');
             }
         }
 

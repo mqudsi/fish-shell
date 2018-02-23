@@ -85,10 +85,10 @@ bool builtin_bind_t::list_one(const wcstring &seq, const wcstring &bind_mode,
     for (size_t i = 0; i < ecmds.size(); i++) {
         const wcstring &ecmd = ecmds.at(i);
         const wcstring escaped_ecmd = escape_string(ecmd, ESCAPE_ALL);
-        streams.out.push_back(' ');
+        streams.out.append(' ');
         streams.out.append(escaped_ecmd);
     }
-    streams.out.push_back(L'\n');
+    streams.out.append(L'\n');
 
     return true;
 }

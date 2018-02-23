@@ -43,7 +43,7 @@ int builtin_source(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
         // Either a bare `source` which means to implicitly read from stdin or an explicit `-`.
         fn = L"-";
         fn_intern = fn;
-        fd = dup(streams.stdin_fd);
+        fd = dup(streams.in.fd);
     } else {
         if ((fd = wopen_cloexec(argv[optind], O_RDONLY)) == -1) {
             streams.err.append_format(_(L"%ls: Error encountered while sourcing file '%ls':\n"),

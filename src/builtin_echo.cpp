@@ -191,14 +191,14 @@ int builtin_echo(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
     const wchar_t *const *args_to_echo = argv + optind;
     for (size_t idx = 0; continue_output && args_to_echo[idx] != NULL; idx++) {
         if (opts.print_spaces && idx > 0) {
-            streams.out.push_back(' ');
+            streams.out.append(' ');
         }
 
         const wchar_t *str = args_to_echo[idx];
         for (size_t j = 0; continue_output && str[j]; j++) {
             if (!opts.interpret_special_chars || str[j] != L'\\') {
                 // Not an escape.
-                streams.out.push_back(str[j]);
+                streams.out.append(str[j]);
             } else {
                 // Most escapes consume one character in addition to the backslash; the numeric
                 // sequences may consume more, while an unrecognized escape sequence consumes none.
@@ -268,13 +268,13 @@ int builtin_echo(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
                 j += consumed;
 
                 if (continue_output) {
-                    streams.out.push_back(wc);
+                    streams.out.append(wc);
                 }
             }
         }
     }
     if (opts.print_newline && continue_output) {
-        streams.out.push_back('\n');
+        streams.out.append('\n');
     }
     return STATUS_CMD_OK;
 }
