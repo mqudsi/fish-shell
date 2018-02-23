@@ -841,16 +841,16 @@ static void test_parser() {
     // the principal parser because we cannot yet execute jobs on other parsers.
     say(L"Testing recursion detection");
     parser_t::principal_parser().eval(L"function recursive ; recursive ; end ; recursive; ",
-                                      io_chain_t(), TOP);
+                                      io_streams_t(), TOP);
 #if 0
     // This is disabled since it produces a long backtrace. We should find a way to either visually
     // compress the backtrace, or disable error spewing.
     parser_t::principal_parser().eval(L"function recursive1 ; recursive2 ; end ; "
-            L"function recursive2 ; recursive1 ; end ; recursive1; ", io_chain_t(), TOP);
+            L"function recursive2 ; recursive1 ; end ; recursive1; ", io_streams_t(), TOP);
 #endif
 
     say(L"Testing empty function name");
-    parser_t::principal_parser().eval(L"function '' ; echo fail; exit 42 ; end ; ''", io_chain_t(),
+    parser_t::principal_parser().eval(L"function '' ; echo fail; exit 42 ; end ; ''", io_streams_t(),
                                       TOP);
 
     say(L"Testing eval_args");
@@ -863,8 +863,8 @@ static void test_parser() {
 }
 
 static void test_1_cancellation(const wchar_t *src) {
-    shared_ptr<io_buffer_t> out_buff(io_buffer_t::create(STDOUT_FILENO, io_chain_t()));
-    const io_chain_t io_chain(out_buff);
+    shared_ptr<io_buffer_t> out_buff(io_buffer_t::create(STDOUT_FILENO, io_streams_t()));
+    const io_streams_t io_chain(out_buff);
     pthread_t thread = pthread_self();
     double delay = 0.25 /* seconds */;
     iothread_perform([=]() {
@@ -912,7 +912,7 @@ static void test_cancellation() {
     // else we will SIGINT ourselves in response to our child death
     scoped_push<bool> iis(&is_interactive_session, true);
     const wchar_t *child_self_destructor = L"while true ; sh -c 'sleep .25; kill -s INT $$' ; end";
-    parser_t::principal_parser().eval(child_self_destructor, io_chain_t(), TOP);
+    parser_t::principal_parser().eval(child_self_destructor, io_streams_t(), TOP);
     iis.restore();
 
     // Restore signal handling.
@@ -4367,7 +4367,7 @@ static void test_illegal_command_exit_code() {
         {L") ", STATUS_ILLEGAL_CMD}};
 
     int res = 0;
-    const io_chain_t empty_ios;
+    const io_streams_t empty_ios;
     parser_t &parser = parser_t::principal_parser();
 
     size_t i = 0;

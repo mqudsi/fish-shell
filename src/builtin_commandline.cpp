@@ -160,7 +160,7 @@ static void write_part(const wchar_t *begin, const wchar_t *end, int cut_at_curs
         } else {
             streams.out.append(begin, end - begin);
         }
-        streams.out.append(L'\n');
+        streams.out.push_back(L'\n');
     }
 }
 

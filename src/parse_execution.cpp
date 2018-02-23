@@ -771,7 +771,7 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(
     }
 
     // The argument list and set of IO redirections that we will construct for the process.
-    io_chain_t process_io_chain;
+    io_streams_t process_io_chain;
     wcstring_list_t argument_list;
     if (use_implicit_cd) {
         /* Implicit cd is simple */
@@ -863,8 +863,8 @@ parse_execution_result_t parse_execution_context_t::expand_arguments_from_nodes(
 }
 
 bool parse_execution_context_t::determine_io_chain(tnode_t<g::arguments_or_redirections_list> node,
-                                                   io_chain_t *out_chain) {
-    io_chain_t result;
+                                                   io_streams_t *out_chain) {
+    io_streams_t result;
     bool errored = false;
 
     // Get all redirection nodes underneath the statement.
@@ -976,7 +976,7 @@ parse_execution_result_t parse_execution_context_t::populate_block_process(
     // The set of IO redirections that we construct for the process.
     // TODO: fix this ugly find_child.
     auto arguments = specific_statement.template find_child<g::arguments_or_redirections_list>();
-    io_chain_t process_io_chain;
+    io_streams_t process_io_chain;
     bool errored = !this->determine_io_chain(arguments, &process_io_chain);
     if (errored) return parse_execution_errored;
 
@@ -1248,11 +1248,11 @@ parse_execution_result_t parse_execution_context_t::run_job_list(tnode_t<Type> j
 
 parse_execution_result_t parse_execution_context_t::eval_node(tnode_t<g::statement> statement,
                                                               const block_t *associated_block,
-                                                              const io_chain_t &io) {
+                                                              const io_streams_t &io) {
     assert(statement && "Empty node in eval_node");
     assert(statement.matches_node_tree(tree()) && "statement has unexpected tree");
     // Apply this block IO for the duration of this function.
-    scoped_push<io_chain_t> block_io_push(&block_io, io);
+    scoped_push<io_streams_t> block_io_push(&block_io, io);
     enum parse_execution_result_t status = parse_execution_success;
     if (auto block = statement.try_get_child<g::block_statement, 0>()) {
         status = this->run_block_statement(block);
@@ -1270,11 +1270,11 @@ parse_execution_result_t parse_execution_context_t::eval_node(tnode_t<g::stateme
 
 parse_execution_result_t parse_execution_context_t::eval_node(tnode_t<g::job_list> job_list,
                                                               const block_t *associated_block,
-                                                              const io_chain_t &io) {
+                                                              const io_streams_t &io) {
     // Apply this block IO for the duration of this function.
     assert(job_list && "Empty node in eval_node");
     assert(job_list.matches_node_tree(tree()) && "job_list has unexpected tree");
-    scoped_push<io_chain_t> block_io_push(&block_io, io);
+    scoped_push<io_streams_t> block_io_push(&block_io, io);
     enum parse_execution_result_t status = parse_execution_success;
     wcstring func_name;
     auto infinite_recursive_node =

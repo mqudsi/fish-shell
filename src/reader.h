@@ -16,7 +16,7 @@
 
 class history_t;
 class env_vars_snapshot_t;
-class io_chain_t;
+class io_streams_t;
 
 /// Helper class for storing a command line.
 class editable_line_t {
@@ -47,7 +47,7 @@ class editable_line_t {
 };
 
 /// Read commands from \c fd until encountering EOF.
-int reader_read(int fd, const io_chain_t &io);
+int reader_read(int fd, const io_streams_t &io);
 
 /// Tell the shell that it should exit after the currently running command finishes.
 void reader_exit(int do_exit, int force);

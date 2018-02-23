@@ -64,7 +64,7 @@ class process_t {
    private:
     null_terminated_array_t<wchar_t> argv_array;
 
-    io_chain_t process_io_chain;
+    io_streams_t process_io_chain;
 
     // No copying.
     process_t(const process_t &rhs);
@@ -107,9 +107,9 @@ class process_t {
     }
 
     /// IO chain getter and setter.
-    const io_chain_t &io_chain() const { return process_io_chain; }
+    const io_streams_t &io_chain() const { return process_io_chain; }
 
-    void set_io_chain(const io_chain_t &chain) { this->process_io_chain = chain; }
+    void set_io_chain(const io_streams_t &chain) { this->process_io_chain = chain; }
 
     /// Actual command to pass to exec in case of EXTERNAL or INTERNAL_EXEC.
     wcstring actual_cmd;
@@ -170,14 +170,14 @@ class job_t {
     wcstring command_str;
 
     // The IO chain associated with the block.
-    const io_chain_t block_io;
+    const io_streams_t block_io;
 
     // No copying.
     job_t(const job_t &rhs) = delete;
     void operator=(const job_t &) = delete;
 
    public:
-    job_t(job_id_t jobid, io_chain_t bio);
+    job_t(job_id_t jobid, io_streams_t bio);
     ~job_t();
 
     /// Returns whether the command is empty.
@@ -214,10 +214,10 @@ class job_t {
 
     /// Returns the block IO redirections associated with the job. These are things like the IO
     /// redirections associated with the begin...end statement.
-    const io_chain_t &block_io_chain() const { return this->block_io; }
+    const io_streams_t &block_io_chain() const { return this->block_io; }
 
     /// Fetch all the IO redirections associated with the job.
-    io_chain_t all_io_redirections() const;
+    io_streams_t all_io_redirections() const;
 };
 
 /// Whether we are reading from the keyboard right now.

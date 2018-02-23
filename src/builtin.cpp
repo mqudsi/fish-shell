@@ -374,7 +374,7 @@ static int builtin_breakpoint(parser_t &parser, io_streams_t &streams, wchar_t *
     }
 
     const breakpoint_block_t *bpb = parser.push_block<breakpoint_block_t>();
-    reader_read(STDIN_FILENO, streams.io_chain ? *streams.io_chain : io_chain_t());
+    reader_read(STDIN_FILENO, streams);
     parser.pop_block(bpb);
     return proc_get_last_status();
 }

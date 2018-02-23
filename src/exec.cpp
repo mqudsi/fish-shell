@@ -100,31 +100,8 @@ int exec_pipe(int fd[2]) {
     return res;
 }
 
-/// Returns true if the redirection is a file redirection to a file other than /dev/null.
-static bool redirection_is_to_real_file(const io_data_t *io) {
-    bool result = false;
-    if (io != NULL && io->io_mode == IO_FILE) {
-        // It's a file redirection. Compare the path to /dev/null.
-        const io_file_t *io_file = static_cast<const io_file_t *>(io);
-        const char *path = io_file->filename_cstr;
-        if (strcmp(path, "/dev/null") != 0) {
-            // It's not /dev/null.
-            result = true;
-        }
-    }
-    return result;
-}
-
-static bool chain_contains_redirection_to_real_file(const io_chain_t &io_chain) {
-    bool result = false;
-    for (size_t idx = 0; idx < io_chain.size(); idx++) {
-        const io_data_t *io = io_chain.at(idx).get();
-        if (redirection_is_to_real_file(io)) {
-            result = true;
-            break;
-        }
-    }
-    return result;
+static bool chain_contains_redirection_to_real_file(const io_streams_t &io_chain) {
+    return io_chain.in.is_real_file() || io_chain.out.is_real_file() || io_chain.err.is_real_file();
 }
 
 /// Returns the interpreter for the specified script. Returns NULL if file is not a script with a
@@ -220,7 +197,7 @@ static void launch_process_nofork(process_t *p) {
 }
 
 /// Check if the IO redirection chains contains redirections for the specified file descriptor.
-static int has_fd(const io_chain_t &d, int fd) { return io_chain_get(d, fd).get() != NULL; }
+static int has_fd(const io_streams_t &d, int fd) { return io_chain_get(d, fd).get() != NULL; }
 
 /// Close a list of fds.
 static void io_cleanup_fds(const std::vector<int> &opened_fds) {
@@ -233,7 +210,7 @@ static void io_cleanup_fds(const std::vector<int> &opened_fds) {
 /// position.
 ///
 /// \return true on success, false on failure. Returns the output chain and opened_fds by reference.
-static bool io_transmogrify(const io_chain_t &in_chain, io_chain_t *out_chain,
+static bool io_transmogrify(const io_streams_t &in_chain, io_streams_t *out_chain,
                             std::vector<int> *out_opened_fds) {
     ASSERT_IS_MAIN_THREAD();
     assert(out_chain != NULL && out_opened_fds != NULL);
@@ -247,7 +224,7 @@ static bool io_transmogrify(const io_chain_t &in_chain, io_chain_t *out_chain,
     bool success = true;
 
     // Make our chain of redirections.
-    io_chain_t result_chain;
+    io_streams_t result_chain;
 
     // In the event we can't finish transmorgrifying, we'll have to close all the files we opened.
     std::vector<int> opened_fds;
@@ -310,10 +287,10 @@ static bool io_transmogrify(const io_chain_t &in_chain, io_chain_t *out_chain,
 /// \param ios the io redirections to be performed on this block
 template <typename T>
 void internal_exec_helper(parser_t &parser, parsed_source_ref_t parsed_source, tnode_t<T> node,
-                          const io_chain_t &ios) {
+                          const io_streams_t &ios) {
     assert(parsed_source && node && "exec_helper missing source or without node");
 
-    io_chain_t morphed_chain;
+    io_streams_t morphed_chain;
     std::vector<int> opened_fds;
     bool transmorgrified = io_transmogrify(ios, &morphed_chain, &opened_fds);
 
@@ -358,7 +335,7 @@ static bool can_use_posix_spawn_for_job(const job_t *job, const process_t *proce
     return result;
 }
 
-void internal_exec(job_t *j, const io_chain_t &&all_ios) {
+void internal_exec(job_t *j, const io_streams_t &&all_ios) {
     // Do a regular launch -  but without forking first...
     signal_block();
 
@@ -395,8 +372,7 @@ void internal_exec(job_t *j, const io_chain_t &&all_ios) {
 /// assign stdin to it; otherwise infer stdin from the IO chain.
 /// return true on success, false if there is an exec error.
 static bool exec_internal_builtin_proc(parser_t &parser, job_t *j, process_t *p,
-                                       const io_pipe_t *pipe_read, const io_chain_t &proc_io_chain,
-                                       io_streams_t &streams) {
+        io_stream_t *input_stream, io_stream_t *&output_stream)
     assert(p->type == INTERNAL_BUILTIN && "Process must be a builtin");
     int local_builtin_stdin = STDIN_FILENO;
     bool close_stdin = false;
@@ -617,7 +593,7 @@ void exec_job(parser_t &parser, job_t *j) {
         process_t *const p = unique_p.get();
         // The IO chain for this process. It starts with the block IO, then pipes, and then gets any
         // from the process.
-        io_chain_t process_net_io_chain = j->block_io_chain();
+        io_streams_t process_net_io_chain = j->block_io_chain();
 
         // "Consume" any pipe_next_read by making it current.
         assert(pipe_current_read == -1);
@@ -1148,10 +1124,10 @@ static int exec_subshell_internal(const wcstring &cmd, wcstring_list_t *lst, boo
     // IO buffer creation may fail (e.g. if we have too many open files to make a pipe), so this may
     // be null.
     const shared_ptr<io_buffer_t> io_buffer(
-        io_buffer_t::create(STDOUT_FILENO, io_chain_t(), is_subcmd ? read_byte_limit : 0));
+        io_buffer_t::create(STDOUT_FILENO, io_streams_t(), is_subcmd ? read_byte_limit : 0));
     if (io_buffer.get() != NULL) {
         parser_t &parser = parser_t::principal_parser();
-        if (parser.eval(cmd, io_chain_t(io_buffer), SUBST) == 0) {
+        if (parser.eval(cmd, io_streams_t(io_buffer), SUBST) == 0) {
             subcommand_status = proc_get_last_status();
         }
 

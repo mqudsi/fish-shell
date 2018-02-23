@@ -14,11 +14,10 @@
 #include "common.h"
 #include "event.h"
 #include "expand.h"
+#include "io.h"
 #include "parse_constants.h"
 #include "parse_tree.h"
 #include "proc.h"
-
-class io_chain_t;
 
 /// event_blockage_t represents a block on events of the specified type.
 struct event_blockage_t {
@@ -227,15 +226,15 @@ class parser_t {
     /// \param block_type The type of block to push on the block stack
     ///
     /// \return 0 on success, 1 on a parse error.
-    int eval(wcstring cmd, const io_chain_t &io, enum block_type_t block_type);
+    int eval(wcstring cmd, const io_streams_t &io, enum block_type_t block_type);
 
     /// Evaluate the parsed source ps.
-    void eval(parsed_source_ref_t ps, const io_chain_t &io, enum block_type_t block_type);
+    void eval(parsed_source_ref_t ps, const io_streams_t &io, enum block_type_t block_type);
 
     /// Evaluates a node.
     /// The node type must be grammar::statement or grammar::job_list.
     template <typename T>
-    int eval_node(parsed_source_ref_t ps, tnode_t<T> node, const io_chain_t &io,
+    int eval_node(parsed_source_ref_t ps, tnode_t<T> node, const io_streams_t &io,
                   enum block_type_t block_type);
 
     /// Evaluate line as a list of parameters, i.e. tokenize it and perform parameter expansion and

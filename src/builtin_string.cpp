@@ -484,7 +484,7 @@ static int string_escape_script(options_t &opts, int optind, wchar_t **argv,
     arg_iterator_t aiter(argv, optind, streams);
     while (const wchar_t *arg = aiter.next()) {
         streams.out.append(escape_string(arg, flags, STRING_STYLE_SCRIPT));
-        streams.out.append(L'\n');
+        streams.out.push_back(L'\n');
         nesc++;
     }
 
@@ -500,7 +500,7 @@ static int string_escape_url(options_t &opts, int optind, wchar_t **argv, io_str
     arg_iterator_t aiter(argv, optind, streams);
     while (const wchar_t *arg = aiter.next()) {
         streams.out.append(escape_string(arg, flags, STRING_STYLE_URL));
-        streams.out.append(L'\n');
+        streams.out.push_back(L'\n');
         nesc++;
     }
 
@@ -516,7 +516,7 @@ static int string_escape_var(options_t &opts, int optind, wchar_t **argv, io_str
     arg_iterator_t aiter(argv, optind, streams);
     while (const wchar_t *arg = aiter.next()) {
         streams.out.append(escape_string(arg, flags, STRING_STYLE_VAR));
-        streams.out.append(L'\n');
+        streams.out.push_back(L'\n');
         nesc++;
     }
 
@@ -535,7 +535,7 @@ static int string_unescape_script(options_t &opts, int optind, wchar_t **argv,
         wcstring result;
         if (unescape_string(arg, &result, flags, STRING_STYLE_SCRIPT)) {
             streams.out.append(result);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
             nesc++;
         }
     }
@@ -554,7 +554,7 @@ static int string_unescape_url(options_t &opts, int optind, wchar_t **argv, io_s
         wcstring result;
         if (unescape_string(arg, &result, flags, STRING_STYLE_URL)) {
             streams.out.append(result);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
             nesc++;
         }
     }
@@ -573,7 +573,7 @@ static int string_unescape_var(options_t &opts, int optind, wchar_t **argv, io_s
         wcstring result;
         if (unescape_string(arg, &result, flags, STRING_STYLE_VAR)) {
             streams.out.append(result);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
             nesc++;
         }
     }
@@ -647,7 +647,7 @@ static int string_join(parser_t &parser, io_streams_t &streams, int argc, wchar_
         nargs++;
     }
     if (nargs > 0 && !opts.quiet) {
-        streams.out.append(L'\n');
+        streams.out.push_back(L'\n');
     }
 
     return nargs > 1 ? STATUS_CMD_OK : STATUS_CMD_ERROR;
@@ -669,7 +669,7 @@ static int string_length(parser_t &parser, io_streams_t &streams, int argc, wcha
         }
         if (!opts.quiet) {
             streams.out.append(to_string(n));
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     }
 
@@ -734,7 +734,7 @@ class wildcard_matcher_t : public string_matcher_t {
                     streams.out.append_format(L"1 %lu\n", wcslen(arg));
                 } else {
                     streams.out.append(arg);
-                    streams.out.append(L'\n');
+                    streams.out.push_back(L'\n');
                 }
             }
         }
@@ -801,7 +801,7 @@ class pcre2_matcher_t : public string_matcher_t {
                     streams.out.append_format(L"1 %lu\n", wcslen(arg));
                 } else {
                     streams.out.append(arg);
-                    streams.out.append(L'\n');
+                    streams.out.push_back(L'\n');
                 }
             }
 
@@ -820,7 +820,7 @@ class pcre2_matcher_t : public string_matcher_t {
 
         if (opts.entire) {
             streams.out.append(arg);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
 
         PCRE2_SIZE *ovector = pcre2_get_ovector_pointer(regex.match);
@@ -836,7 +836,7 @@ class pcre2_matcher_t : public string_matcher_t {
                     // May have end < begin if \K is used.
                     streams.out.append(wcstring(&arg[begin], end - begin));
                 }
-                streams.out.append(L'\n');
+                streams.out.push_back(L'\n');
             }
         }
 
@@ -1038,7 +1038,7 @@ bool literal_replacer_t::replace_matches(const wchar_t *arg) {
 
     if (!opts.quiet && (!opts.filter || replacement_occurred)) {
         streams.out.append(result);
-        streams.out.append(L'\n');
+        streams.out.push_back(L'\n');
     }
 
     return true;
@@ -1086,7 +1086,7 @@ bool regex_replacer_t::replace_matches(const wchar_t *arg) {
         bool replacement_occurred = pcre2_rc > 0;
         if (!opts.quiet && (!opts.filter || replacement_occurred)) {
             streams.out.append(output);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
         total_replaced += pcre2_rc;
     }
@@ -1163,7 +1163,7 @@ static int string_split(parser_t &parser, io_streams_t &streams, int argc, wchar
     if (!opts.quiet) {
         for (wcstring_list_t::const_iterator si = splits.begin(); si != splits.end(); ++si) {
             streams.out.append(*si);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     }
 
@@ -1259,7 +1259,7 @@ static int string_sub(parser_t &parser, io_streams_t &streams, int argc, wchar_t
         // Note that std::string permits count to extend past end of string.
         if (!opts.quiet) {
             streams.out.append(s.substr(pos, count));
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
         nsub++;
     }
@@ -1303,7 +1303,7 @@ static int string_trim(parser_t &parser, io_streams_t &streams, int argc, wchar_
         ntrim += argstr.size() - (end - begin);
         if (!opts.quiet) {
             streams.out.append(wcstring(argstr, begin, end - begin));
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     }
 
@@ -1326,7 +1326,7 @@ static int string_lower(parser_t &parser, io_streams_t &streams, int argc, wchar
         if (wcscmp(transformed.c_str(), arg)) n_transformed++;
         if (!opts.quiet) {
             streams.out.append(transformed);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     }
 
@@ -1349,7 +1349,7 @@ static int string_upper(parser_t &parser, io_streams_t &streams, int argc, wchar
         if (wcscmp(transformed.c_str(), arg)) n_transformed++;
         if (!opts.quiet) {
             streams.out.append(transformed);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     }
 

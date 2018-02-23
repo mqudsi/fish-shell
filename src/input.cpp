@@ -349,7 +349,7 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
         int last_status = proc_get_last_status();
         for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end();
              it != end; ++it) {
-            parser_t::principal_parser().eval(it->c_str(), io_chain_t(), TOP);
+            parser_t::principal_parser().eval(it->c_str(), io_streams_t(), TOP);
         }
         proc_set_last_status(last_status);
         input_common_next_ch(R_NULL);

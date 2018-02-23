@@ -352,7 +352,7 @@ process_t::process_t() {}
 ///   the Linux kernel will use it for kernel processes.
 /// -1 should not be used; it is a possible return value of the getpgid()
 ///   function
-job_t::job_t(job_id_t jobid, io_chain_t bio)
+job_t::job_t(job_id_t jobid, io_streams_t bio)
     : block_io(std::move(bio)), pgid(-2), tmodes(), job_id(jobid), flags(0) {}
 
 job_t::~job_t() { release_job_id(job_id); }
@@ -705,7 +705,7 @@ static int select_try(job_t *j) {
 
     FD_ZERO(&fds);
 
-    const io_chain_t chain = j->all_io_redirections();
+    const io_streams_t chain = j->all_io_redirections();
     for (size_t idx = 0; idx < chain.size(); idx++) {
         const io_data_t *io = chain.at(idx).get();
         if (io->io_mode == IO_BUFFER) {
@@ -742,7 +742,7 @@ static void read_try(job_t *j) {
     io_buffer_t *buff = NULL;
 
     // Find the last buffer, which is the one we want to read from.
-    const io_chain_t chain = j->all_io_redirections();
+    const io_streams_t chain = j->all_io_redirections();
     for (size_t idx = 0; idx < chain.size(); idx++) {
         io_data_t *d = chain.at(idx).get();
         if (d->io_mode == IO_BUFFER) {

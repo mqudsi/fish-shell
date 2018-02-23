@@ -88,7 +88,7 @@ bool builtin_bind_t::list_one(const wcstring &seq, const wcstring &bind_mode,
         streams.out.append(' ');
         streams.out.append(escaped_ecmd);
     }
-    streams.out.append(L'\n');
+    streams.out.push_back(L'\n');
 
     return true;
 }

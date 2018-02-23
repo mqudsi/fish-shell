@@ -67,7 +67,7 @@ void io_buffer_t::read() {
     }
 }
 
-bool io_buffer_t::avoid_conflicts_with_io_chain(const io_chain_t &ios) {
+bool io_buffer_t::avoid_conflicts_with_io_chain(const io_streams_t &ios) {
     bool result = pipe_avoid_conflicts_with_io_chain(this->pipe_fd, ios);
     if (!result) {
         wperror(L"dup");
@@ -75,7 +75,7 @@ bool io_buffer_t::avoid_conflicts_with_io_chain(const io_chain_t &ios) {
     return result;
 }
 
-shared_ptr<io_buffer_t> io_buffer_t::create(int fd, const io_chain_t &conflicts,
+shared_ptr<io_buffer_t> io_buffer_t::create(int fd, const io_streams_t &conflicts,
                                             size_t buffer_limit) {
     bool success = true;
     assert(fd >= 0);
@@ -108,9 +108,9 @@ io_buffer_t::~io_buffer_t() {
     // the buffer.
 }
 
-void io_chain_t::remove(const shared_ptr<const io_data_t> &element) {
+void io_streams_t::remove(const shared_ptr<const io_data_t> &element) {
     // See if you can guess why std::find doesn't work here.
-    for (io_chain_t::iterator iter = this->begin(); iter != this->end(); ++iter) {
+    for (io_streams_t::iterator iter = this->begin(); iter != this->end(); ++iter) {
         if (*iter == element) {
             this->erase(iter);
             break;
@@ -118,25 +118,25 @@ void io_chain_t::remove(const shared_ptr<const io_data_t> &element) {
     }
 }
 
-void io_chain_t::push_back(const shared_ptr<io_data_t> &element) {
+void io_streams_t::push_back(const shared_ptr<io_data_t> &element) {
     // Ensure we never push back NULL.
     assert(element.get() != NULL);
     std::vector<shared_ptr<io_data_t> >::push_back(element);
 }
 
-void io_chain_t::push_front(const shared_ptr<io_data_t> &element) {
+void io_streams_t::push_front(const shared_ptr<io_data_t> &element) {
     assert(element.get() != NULL);
     this->insert(this->begin(), element);
 }
 
-void io_chain_t::append(const io_chain_t &chain) {
+void io_streams_t::append(const io_streams_t &chain) {
     this->insert(this->end(), chain.begin(), chain.end());
 }
 
 #if 0
 // This isn't used so the lint tools were complaining about its presence. I'm keeping it in the
 // source because it could be useful for debugging.
-void io_print(const io_chain_t &chain)
+void io_print(const io_streams_t &chain)
 {
     if (chain.empty())
     {
@@ -165,7 +165,7 @@ void io_print(const io_chain_t &chain)
 /// chain is found, or we run out. If we return a new fd or an error, closes the old one. Any fd
 /// created is marked close-on-exec. Returns -1 on failure (in which case the given fd is still
 /// closed).
-static int move_fd_to_unused(int fd, const io_chain_t &io_chain) {
+static int move_fd_to_unused(int fd, const io_streams_t &io_chain) {
     if (fd < 0 || io_chain.get_io_for_fd(fd).get() == NULL) {
         return fd;
     }
@@ -198,7 +198,7 @@ static int move_fd_to_unused(int fd, const io_chain_t &io_chain) {
     return new_fd;
 }
 
-bool pipe_avoid_conflicts_with_io_chain(int fds[2], const io_chain_t &ios) {
+bool pipe_avoid_conflicts_with_io_chain(int fds[2], const io_streams_t &ios) {
     bool success = true;
     for (int i = 0; i < 2; i++) {
         fds[i] = move_fd_to_unused(fds[i], ios);
@@ -223,7 +223,7 @@ bool pipe_avoid_conflicts_with_io_chain(int fds[2], const io_chain_t &ios) {
 }
 
 /// Return the last IO for the given fd.
-shared_ptr<const io_data_t> io_chain_t::get_io_for_fd(int fd) const {
+shared_ptr<const io_data_t> io_streams_t::get_io_for_fd(int fd) const {
     size_t idx = this->size();
     while (idx--) {
         const shared_ptr<io_data_t> &data = this->at(idx);
@@ -234,7 +234,7 @@ shared_ptr<const io_data_t> io_chain_t::get_io_for_fd(int fd) const {
     return shared_ptr<const io_data_t>();
 }
 
-shared_ptr<io_data_t> io_chain_t::get_io_for_fd(int fd) {
+shared_ptr<io_data_t> io_streams_t::get_io_for_fd(int fd) {
     size_t idx = this->size();
     while (idx--) {
         const shared_ptr<io_data_t> &data = this->at(idx);
@@ -246,13 +246,13 @@ shared_ptr<io_data_t> io_chain_t::get_io_for_fd(int fd) {
 }
 
 /// The old function returned the last match, so we mimic that.
-shared_ptr<const io_data_t> io_chain_get(const io_chain_t &src, int fd) {
+shared_ptr<const io_data_t> io_chain_get(const io_streams_t &src, int fd) {
     return src.get_io_for_fd(fd);
 }
 
-shared_ptr<io_data_t> io_chain_get(io_chain_t &src, int fd) { return src.get_io_for_fd(fd); }
+shared_ptr<io_data_t> io_chain_get(io_streams_t &src, int fd) { return src.get_io_for_fd(fd); }
 
-io_chain_t::io_chain_t(const shared_ptr<io_data_t> &data)
+io_streams_t::io_streams_t(const shared_ptr<io_data_t> &data)
     : std::vector<shared_ptr<io_data_t> >(1, data) {}
 
-io_chain_t::io_chain_t() : std::vector<shared_ptr<io_data_t> >() {}
+io_streams_t::io_streams_t() : std::vector<shared_ptr<io_data_t> >() {}

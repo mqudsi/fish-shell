@@ -25,7 +25,7 @@
 #include "tnode.h"
 #include "wutil.h"  // IWYU pragma: keep
 
-class io_chain_t;
+class io_streams_t;
 
 /// Error for evaluating in illegal scope.
 #define INVALID_SCOPE_ERR_MSG _(L"Tried to evaluate commands using invalid block type '%ls'")
@@ -632,7 +632,7 @@ profile_item_t *parser_t::create_profile_item() {
     return result;
 }
 
-int parser_t::eval(wcstring cmd, const io_chain_t &io, enum block_type_t block_type) {
+int parser_t::eval(wcstring cmd, const io_streams_t &io, enum block_type_t block_type) {
     // Parse the source into a tree, if we can.
     parse_error_list_t error_list;
     parsed_source_ref_t ps = parse_source(cmd, parse_flag_none, &error_list);
@@ -649,7 +649,7 @@ int parser_t::eval(wcstring cmd, const io_chain_t &io, enum block_type_t block_t
     return 0;
 }
 
-void parser_t::eval(parsed_source_ref_t ps, const io_chain_t &io, enum block_type_t block_type) {
+void parser_t::eval(parsed_source_ref_t ps, const io_streams_t &io, enum block_type_t block_type) {
     CHECK_BLOCK(1);
     assert(block_type == TOP || block_type == SUBST);
     if (!ps->tree.empty()) {
@@ -660,7 +660,7 @@ void parser_t::eval(parsed_source_ref_t ps, const io_chain_t &io, enum block_typ
 }
 
 template <typename T>
-int parser_t::eval_node(parsed_source_ref_t ps, tnode_t<T> node, const io_chain_t &io,
+int parser_t::eval_node(parsed_source_ref_t ps, tnode_t<T> node, const io_streams_t &io,
                         enum block_type_t block_type) {
     static_assert(
         std::is_same<T, grammar::statement>::value || std::is_same<T, grammar::job_list>::value,
@@ -703,9 +703,9 @@ int parser_t::eval_node(parsed_source_ref_t ps, tnode_t<T> node, const io_chain_
 
 // Explicit instantiations. TODO: use overloads instead?
 template int parser_t::eval_node(parsed_source_ref_t, tnode_t<grammar::statement>,
-                                 const io_chain_t &, enum block_type_t);
+                                 const io_streams_t &, enum block_type_t);
 template int parser_t::eval_node(parsed_source_ref_t, tnode_t<grammar::job_list>,
-                                 const io_chain_t &, enum block_type_t);
+                                 const io_streams_t &, enum block_type_t);
 
 bool parser_t::detect_errors_in_argument_list(const wcstring &arg_list_src, wcstring *out,
                                               const wchar_t *prefix) {

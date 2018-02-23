@@ -561,7 +561,7 @@ static int builtin_set_show(const wchar_t *cmd, set_cmd_opts_t &opts, int argc, 
             show_scope(it.c_str(), ENV_LOCAL, streams);
             show_scope(it.c_str(), ENV_GLOBAL, streams);
             show_scope(it.c_str(), ENV_UNIVERSAL, streams);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     } else {
         for (int i = 0; i < argc; i++) {
@@ -582,7 +582,7 @@ static int builtin_set_show(const wchar_t *cmd, set_cmd_opts_t &opts, int argc, 
             show_scope(arg, ENV_LOCAL, streams);
             show_scope(arg, ENV_GLOBAL, streams);
             show_scope(arg, ENV_UNIVERSAL, streams);
-            streams.out.append(L'\n');
+            streams.out.push_back(L'\n');
         }
     }
 

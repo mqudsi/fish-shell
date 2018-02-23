@@ -46,6 +46,10 @@ public:
         return append(wcstring(start, len));
     }
 
+    void push_back(const wchar_t c) {
+        return append(c);
+    }
+
     void append(const wchar_t c) {
         return append_format(L"%c", c);
     }
@@ -80,10 +84,5 @@ struct io_streams_t {
     io_stream_t out;
     io_stream_t err;
 };
-
-// io_chain_t should only be used to keep track of all active streams and
-// should only be used internally in exec.cpp. Defined here while replacing
-// old code.
-typedef std::vector<io_stream_t> io_chain_t;
 
 #endif

@@ -147,7 +147,7 @@ bool maybe_assign_terminal(job_t *j) {
 /// \param io_chain the list of IO redirections for the child
 ///
 /// \return 0 on sucess, -1 on failure
-static int handle_child_io(const io_chain_t &io_chain) {
+static int handle_child_io(const io_streams_t &io_chain) {
     for (size_t idx = 0; idx < io_chain.size(); idx++) {
         const io_data_t *io = io_chain.at(idx).get();
 
@@ -240,7 +240,7 @@ static int handle_child_io(const io_chain_t &io_chain) {
     return 0;
 }
 
-int setup_child_process(process_t *p, const io_chain_t &io_chain) {
+int setup_child_process(process_t *p, const io_streams_t &io_chain) {
     bool ok = true;
 
     if (ok) {
@@ -311,7 +311,7 @@ pid_t execute_fork(bool wait_for_threads_to_die) {
 #if FISH_USE_POSIX_SPAWN
 bool fork_actions_make_spawn_properties(posix_spawnattr_t *attr,
                                         posix_spawn_file_actions_t *actions, job_t *j, process_t *p,
-                                        const io_chain_t &io_chain) {
+                                        const io_streams_t &io_chain) {
     UNUSED(p);
     // Initialize the output.
     if (posix_spawnattr_init(attr) != 0) {

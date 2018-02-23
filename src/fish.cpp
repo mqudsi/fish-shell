@@ -204,7 +204,7 @@ static void source_config_in_directory(const wcstring &dir) {
     const wcstring cmd = L"builtin source " + escaped_pathname;
     parser_t &parser = parser_t::principal_parser();
     parser.set_is_within_fish_initialization(true);
-    parser.eval(cmd, io_chain_t(), TOP);
+    parser.eval(cmd, io_streams_t(), TOP);
     parser.set_is_within_fish_initialization(false);
 }
 
@@ -224,7 +224,7 @@ static int read_init(const struct config_paths_t &paths) {
     return 1;
 }
 
-int run_command_list(std::vector<std::string> *cmds, const io_chain_t &io) {
+int run_command_list(std::vector<std::string> *cmds, const io_streams_t &io) {
     int res = 1;
     parser_t &parser = parser_t::principal_parser();
 
@@ -382,7 +382,7 @@ int main(int argc, char **argv) {
 
     parser_t &parser = parser_t::principal_parser();
 
-    const io_chain_t empty_ios;
+    const io_streams_t empty_ios;
     if (read_init(paths)) {
         // Stomp the exit status of any initialization commands (issue #635).
         proc_set_last_status(STATUS_CMD_OK);

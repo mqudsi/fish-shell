@@ -35,6 +35,6 @@ int builtin_pwd(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
         return STATUS_CMD_ERROR;
     }
     streams.out.append(res);
-    streams.out.append(L'\n');
+    streams.out.push_back(L'\n');
     return STATUS_CMD_OK;
 }

@@ -1900,7 +1900,7 @@ void reader_run_command(parser_t &parser, const wcstring &cmd) {
 
     gettimeofday(&time_before, NULL);
 
-    parser.eval(cmd, io_chain_t(), TOP);
+    parser.eval(cmd, io_streams_t(), TOP);
     job_reap(1);
 
     gettimeofday(&time_after, NULL);
@@ -3256,7 +3256,7 @@ int reader_has_pager_contents() {
 
 /// Read non-interactively.  Read input from stdin without displaying the prompt, using syntax
 /// highlighting. This is used for reading scripts and init files.
-static int read_ni(int fd, const io_chain_t &io) {
+static int read_ni(int fd, const io_streams_t &io) {
     parser_t &parser = parser_t::principal_parser();
     FILE *in_stream;
     wchar_t *buff = 0;
@@ -3331,7 +3331,7 @@ static int read_ni(int fd, const io_chain_t &io) {
     return res;
 }
 
-int reader_read(int fd, const io_chain_t &io) {
+int reader_read(int fd, const io_streams_t &io) {
     int res;
 
     // If reader_read is called recursively through the '.' builtin, we need to preserve

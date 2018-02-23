@@ -29,7 +29,7 @@ enum parse_execution_result_t {
 class parse_execution_context_t {
    private:
     parsed_source_ref_t pstree;
-    io_chain_t block_io;
+    io_stream_t block_io;
     parser_t *const parser;
     // The currently executing job node, used to indicate the line number.
     tnode_t<grammar::job> executing_job_node{};
@@ -111,7 +111,7 @@ class parse_execution_context_t {
 
     // Determines the IO chain. Returns true on success, false on error.
     bool determine_io_chain(tnode_t<grammar::arguments_or_redirections_list> node,
-                            io_chain_t *out_chain);
+                            io_streams_t *out_chain);
 
     parse_execution_result_t run_1_job(tnode_t<grammar::job> job, const block_t *associated_block);
     template <typename Type>
@@ -143,9 +143,9 @@ class parse_execution_context_t {
     /// Start executing at the given node. Returns 0 if there was no error, 1 if there was an
     /// error.
     parse_execution_result_t eval_node(tnode_t<grammar::statement> statement,
-                                       const block_t *associated_block, const io_chain_t &io);
+                                       const block_t *associated_block, const io_streams_t &io);
     parse_execution_result_t eval_node(tnode_t<grammar::job_list> job_list,
-                                       const block_t *associated_block, const io_chain_t &io);
+                                       const block_t *associated_block, const io_streams_t &io);
 };
 
 #endif
