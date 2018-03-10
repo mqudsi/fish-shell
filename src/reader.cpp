@@ -72,6 +72,7 @@
 #include "tnode.h"
 #include "tokenizer.h"
 #include "util.h"
+#include "wildcard.h"
 #include "wutil.h"  // IWYU pragma: keep
 
 // Name of the variable that tells how long it took, in milliseconds, for the previous
@@ -2560,7 +2561,7 @@ const wchar_t *reader_readline(int nchars) {
                     // Construct a copy of the string from the beginning of the command substitution
                     // up to the end of the token we're completing.
                     const wcstring buffcpy = wcstring(cmdsub_begin, token_end);
-                    bool cmd_completion = buffcpy.find_first_of(whitespace) == wcstring::npos;
+                    bool is_head = buffcpy.find_first_of(whitespace) == wcstring::npos;
 
                     // fwprintf(stderr, L"Complete (%ls)\n", buffcpy.c_str());
                     complete_flags_t complete_flags = COMPLETION_REQUEST_DEFAULT |
@@ -2568,11 +2569,32 @@ const wchar_t *reader_readline(int nchars) {
                                                       COMPLETION_REQUEST_FUZZY_MATCH;
                     data->complete_func(buffcpy, &comp, complete_flags);
 
-                    // Nothing seems to happen with the complete_flags assigned above,
-                    // so assign COMPLETION_CMD_COMPLETION here instead.
-                    if (cmd_completion) {
-                        for (auto &c : comp) {
-                            c.flags |= COMPLETION_CMD_COMPLETION;
+                    // Compile fignore list for filtering head
+                    if (is_head) {
+                        wcstring_list_t fignore_list;
+                        auto fignore_var = env_get(L"fignore", 0);
+                        if (fignore_var.has_value()) {
+                            fignore_var->to_list(fignore_list);
+                            for (auto &fi : fignore_list) {
+                                for (auto &c : fi) {
+                                    if (c == L'*') {
+                                        c = ANY_STRING;
+                                    }
+                                }
+                            }
+
+                            // Now filter file suggestions based on the wildcards formed above (#4440)
+                            comp.erase(std::remove_if(comp.begin(), comp.end(), [&](completion_t &completion) -> bool {
+                                if (completion.flags & COMPLETION_PATH_COMPLETION) {
+                                    for (auto &fi : fignore_list) {
+                                        if (wildcard_match(completion.completion, fi)) {
+                                            debug(5, L"Dropped completion %ls due to $fignore\n", completion.completion.c_str());
+                                            return true;
+                                        }
+                                    }
+                                }
+                                return false;
+                            }), comp.end());
                         }
                     }
 

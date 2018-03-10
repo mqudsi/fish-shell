@@ -261,40 +261,10 @@ void completions_sort_and_prioritize(std::vector<completion_t> *comps) {
         best_type = fuzzy_match_prefix;
     }
 
-    wcstring_list_t fignore_list;
-    auto fignore_var = env_get(L"fignore", 0);
-    if (fignore_var.has_value())
-    fignore_var->to_list(fignore_list);
-
-    //parse the wildcard expression
-    for (auto &fi : fignore_list) {
-        for (auto &c : fi) {
-            if (c == L'*') {
-                c = ANY_STRING;
-            }
-        }
-    }
-
     // Throw out completions whose match types are less suitable than the best.
     comps->erase(std::remove_if(comps->begin(), comps->end(), [&] (const completion_t &comp) {
         return comp.match.type > best_type;
     }), comps->end());
-
-    size_t i = comps->size();
-    while (i--) {
-        completion_t &comp = comps->at(i);
-
-        if ((comp.flags & (COMPLETION_PATH_COMPLETION | COMPLETION_CMD_COMPLETION))
-                == (COMPLETION_PATH_COMPLETION | COMPLETION_CMD_COMPLETION)) {
-            for (auto &fi : fignore_list) {
-                if (wildcard_match(comp.completion, fi)) {
-                    debug(5, L"Dropped completion %ls due to $fignore\n", comp.completion.c_str());
-                    comps->erase(comps->begin() + i);
-                    continue;
-                }
-            }
-        }
-    }
 
     // Sort, provided COMPLETION_DONT_SORT isn't set
     stable_sort(comps->begin(), comps->end(), completion_t::is_naturally_less_than);
