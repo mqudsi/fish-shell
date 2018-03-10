@@ -1370,6 +1370,12 @@ static expand_error_t expand_stage_wildcards(const wcstring &input, std::vector<
             }
         }
 
+        // Mark all the expansions we just found as path completions so they can be specifically
+        // filtered accordingly if needed.
+        for (auto &expansion : expanded) {
+            expansion.flags |= COMPLETION_PATH_COMPLETION;
+        }
+
         std::sort(expanded.begin(), expanded.end(), completion_t::is_naturally_less_than);
         std::move(expanded.begin(), expanded.end(), std::back_inserter(*out));
     } else {

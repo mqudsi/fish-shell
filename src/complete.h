@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 #include <vector>
-
 #include "common.h"
 
 /// Use all completions.
@@ -29,6 +28,16 @@
 /// Character that separates the completion and description on programmable completions.
 #define PROG_COMPLETE_SEP L'\t'
 
+constexpr uint32_t BitsSet(uint64_t x)
+{
+    return x < 2 ? x : 1+BitsSet(x >> 1);
+}
+constexpr uint32_t fake_log_2(uint64_t x) {
+    return BitsSet(x) - 1;
+}
+static_assert(fake_log_2(1 << 0) == 0, "fake_log_2 failure");
+static_assert(fake_log_2(1 << 8) == 8, "fake_log_2 failure");
+
 enum {
     /// Do not insert space afterwards if this is the only completion. (The default is to try insert
     /// a space).
@@ -43,7 +52,13 @@ enum {
     /// If you do escape, don't escape tildes.
     COMPLETE_DONT_ESCAPE_TILDES = 1 << 5,
     /// Do not sort supplied completions
-    COMPLETE_DONT_SORT = 1 << 6
+    COMPLETE_DONT_SORT = 1 << 6,
+
+    // The flags past this point are set by the completion provider to describe the result, not by the caller
+    COMPLETE_SEPARATOR_DO_NOT_USE,
+    COMPLETE_SEPARATOR_DO_NOT_USE2 = COMPLETE_SEPARATOR_DO_NOT_USE - 1,
+    COMPLETION_PATH_COMPLETION = 1 << (fake_log_2(COMPLETE_SEPARATOR_DO_NOT_USE2) + 1),
+    COMPLETION_CMD_COMPLETION = 1 << (fake_log_2(COMPLETE_SEPARATOR_DO_NOT_USE2) + 2),
 };
 typedef int complete_flags_t;
 

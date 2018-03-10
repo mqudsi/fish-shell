@@ -2560,12 +2560,21 @@ const wchar_t *reader_readline(int nchars) {
                     // Construct a copy of the string from the beginning of the command substitution
                     // up to the end of the token we're completing.
                     const wcstring buffcpy = wcstring(cmdsub_begin, token_end);
+                    bool cmd_completion = buffcpy.find_first_of(whitespace) == wcstring::npos;
 
                     // fwprintf(stderr, L"Complete (%ls)\n", buffcpy.c_str());
                     complete_flags_t complete_flags = COMPLETION_REQUEST_DEFAULT |
                                                       COMPLETION_REQUEST_DESCRIPTIONS |
                                                       COMPLETION_REQUEST_FUZZY_MATCH;
                     data->complete_func(buffcpy, &comp, complete_flags);
+
+                    // Nothing seems to happen with the complete_flags assigned above,
+                    // so assign COMPLETION_CMD_COMPLETION here instead.
+                    if (cmd_completion) {
+                        for (auto &c : comp) {
+                            c.flags |= COMPLETION_CMD_COMPLETION;
+                        }
+                    }
 
                     // Munge our completions.
                     completions_sort_and_prioritize(&comp);

@@ -977,7 +977,18 @@ void env_init(const struct config_paths_t *paths /* or NULL */) {
     get_hostname_identifier(hostname);
     env_set_one(L"hostname", ENV_GLOBAL, hostname);
 
-    // Set up SHLVL variable. Not we can't use env_get because SHLVL is read-only, and therefore was
+    // Set the default universal fignore pattern (#4440) (regardless if it's been shadowed by a global or local value)
+    auto fignore = env_get(L"fignore", ENV_UNIVERSAL);
+    if (!fignore.has_value()) { //but not .missing_or_empty()
+        wcstring_list_t default_fignore {
+            L"*.dll",
+            L"*.swp",
+        };
+        //mqudsi: why does ENV_UNIVERSAL not work below??
+        env_set(L"fignore", ENV_LOCAL, std::move(default_fignore));
+    }
+
+    // Set up SHLVL variable. Note we can't use env_get because SHLVL is read-only, and therefore was
     // not inherited from the environment.
     wcstring nshlvl_str = L"1";
     if (const char *shlvl_var = getenv("SHLVL")) {
@@ -1247,7 +1258,7 @@ int env_set(const wcstring &key, env_mode_flags_t mode, wcstring_list_t vals) {
 /// Sets the variable with the specified name to a single value.
 int env_set_one(const wcstring &key, env_mode_flags_t mode, wcstring val) {
     wcstring_list_t vals;
-    vals.push_back(std::move(val));
+    vals.emplace_back(val);
     return env_set_internal(key, mode, std::move(vals));
 }
 

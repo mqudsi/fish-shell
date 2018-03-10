@@ -261,18 +261,49 @@ void completions_sort_and_prioritize(std::vector<completion_t> *comps) {
         best_type = fuzzy_match_prefix;
     }
 
+    wcstring_list_t fignore_list;
+    auto fignore_var = env_get(L"fignore", 0);
+    if (fignore_var.has_value())
+    fignore_var->to_list(fignore_list);
+
+    //parse the wildcard expression
+    for (auto &fi : fignore_list) {
+        for (auto &c : fi) {
+            if (c == L'*') {
+                c = ANY_STRING;
+            }
+        }
+    }
+
     // Throw out completions whose match types are less suitable than the best.
     comps->erase(std::remove_if(comps->begin(), comps->end(), [&] (const completion_t &comp) {
         return comp.match.type > best_type;
     }), comps->end());
 
+    size_t i = comps->size();
+    while (i--) {
+        completion_t &comp = comps->at(i);
+
+        if ((comp.flags & (COMPLETION_PATH_COMPLETION | COMPLETION_CMD_COMPLETION))
+                == (COMPLETION_PATH_COMPLETION | COMPLETION_CMD_COMPLETION)) {
+            for (auto &fi : fignore_list) {
+                if (wildcard_match(comp.completion, fi)) {
+                    debug(5, L"Dropped completion %ls due to $fignore\n", comp.completion.c_str());
+                    comps->erase(comps->begin() + i);
+                    continue;
+                }
+            }
+        }
+    }
+
     // Sort, provided COMPLETION_DONT_SORT isn't set
     stable_sort(comps->begin(), comps->end(), completion_t::is_naturally_less_than);
     // Deduplicate both sorted and unsorted results
-    comps->erase(
-        unique_unsorted(comps->begin(), comps->end(),
-                        [](const completion_t &c) { return std::hash<wcstring>{}(c.completion); }),
-        comps->end());
+    comps->erase(unique_unsorted(comps->begin(), comps->end(),
+                                 [](const completion_t &c) {
+                                     return std::hash<wcstring>{}(c.completion);
+                                 }),
+                 comps->end());
 
     // Sort the remainder by match type. They're already sorted alphabetically.
     stable_sort(comps->begin(), comps->end(), compare_completions_by_match_type);
@@ -667,6 +698,10 @@ void completer_t::complete_cmd(const wcstring &str_cmd, bool use_function, bool 
                 append_completion(&possible_comp, names.at(i));
             }
 
+            // for (auto &completion : possible_comp) {
+            //     completion.flags |= COMPLETION_CMD_COMPLETION;
+            // }
+
             this->complete_strings(str_cmd, 0, &complete_function_desc, possible_comp, 0);
         }
 
@@ -674,7 +709,8 @@ void completer_t::complete_cmd(const wcstring &str_cmd, bool use_function, bool 
 
         if (use_builtin) {
             builtin_get_names(&possible_comp);
-            this->complete_strings(str_cmd, 0, &builtin_get_desc, possible_comp, 0);
+            this->complete_strings(str_cmd, 0, &builtin_get_desc, possible_comp,
+                    COMPLETION_CMD_COMPLETION | COMPLETION_PATH_COMPLETION);
         }
     }
 }
@@ -1004,6 +1040,7 @@ bool completer_t::complete_param(const wcstring &scmd_orig, const wcstring &spop
                 append_completion(&this->completions, completion, C_(o->desc), flags);
             }
 
+            flags |= COMPLETION_CMD_COMPLETION;
             append_completion(&this->completions, whole_opt.c_str() + offset, C_(o->desc), flags);
         }
     }
