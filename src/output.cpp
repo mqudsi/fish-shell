@@ -374,7 +374,7 @@ void set_color(rgb_color_t c, rgb_color_t c2) {
 
 /// Default output method, simply calls write() on stdout.
 static int writeb_internal(char c) {  // cppcheck
-    write_loop(1, &c, 1);
+    addch(c);
     return 0;
 }
 
