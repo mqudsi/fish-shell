@@ -118,7 +118,8 @@ FISH_OBJS := obj/autoload.o obj/builtin.o obj/builtin_bg.o obj/builtin_bind.o ob
 	obj/parse_productions.o obj/parse_tree.o obj/parse_util.o obj/parser.o \
 	obj/parser_keywords.o obj/path.o obj/postfork.o obj/proc.o obj/reader.o \
 	obj/sanity.o obj/screen.o obj/signal.o obj/tinyexpr.o obj/tokenizer.o obj/tnode.o obj/utf8.o \
-	obj/util.o obj/wcstringutil.o obj/wgetopt.o obj/wildcard.o obj/wutil.o
+	obj/util.o obj/wcstringutil.o obj/wgetopt.o obj/wildcard.o obj/wutil.o \
+	obj/future_feature_flags.o
 
 FISH_INDENT_OBJS := obj/fish_indent.o obj/print_help.o $(FISH_OBJS)
 
@@ -419,7 +420,7 @@ doc_src/index.hdr: toc.txt doc_src/index.hdr.in | show-AWK
 lexicon_filter: doc_src/commands.hdr $(FUNCTIONS_DIR_FILES) $(COMPLETIONS_DIR_FILES) \
                 lexicon_filter.in build_tools/build_lexicon_filter.sh \
                 share/functions/__fish_config_interactive.fish
-	$v build_tools/build_lexicon_filter.sh share/functions/ share/completions/ $(SED) < lexicon_filter.in > $@
+	$v build_tools/build_lexicon_filter.sh share/functions/ share/completions/ lexicon_filter.in $(SED) > $@
 	$v chmod a+x lexicon_filter
 
 #
@@ -467,7 +468,7 @@ doc.h: $(HDR_FILES)
 #
 %.gmo:
 	@echo "  msgfmt   $(em)$@$(sgr0)"
-	$v msgfmt --use-fuzzy -o $@ $*.po
+	$v msgfmt -o $@ $*.po
 
 #
 # Update existing po file or copy messages.pot

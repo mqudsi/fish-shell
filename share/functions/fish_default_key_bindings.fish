@@ -72,7 +72,9 @@ function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fis
     # This clashes with __fish_list_current_token
     # bind $argv \el downcase-word
     bind $argv \ec capitalize-word
+    # One of these is alt+backspace.
     bind $argv \e\x7f backward-kill-word
+    bind $argv \e\b backward-kill-word
     bind $argv \eb backward-word
     bind $argv \ef forward-word
     bind $argv \e\[1\;5C forward-word
@@ -80,12 +82,12 @@ function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fis
     bind $argv \e\< beginning-of-buffer
     bind $argv \e\> end-of-buffer
 
-    bind \ed kill-word
+    bind $argv \ed kill-word
 
     # Ignore some known-bad control sequences
     # https://github.com/fish-shell/fish-shell/issues/1917
-    bind \e\[I 'begin;end'
-    bind \e\[O 'begin;end'
+    bind $argv \e\[I 'begin;end'
+    bind $argv \e\[O 'begin;end'
 
     # term-specific special bindings
     switch "$TERM"
@@ -93,5 +95,9 @@ function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fis
             bind $argv \e\[8~ end-of-line
             bind $argv \eOc forward-word
             bind $argv \eOd backward-word
+        case 'xterm-256color'
+            # Microsoft's conemu uses xterm-256color plus
+            # the following to tell a console to paste:
+            bind $argv \e\x20ep fish_clipboard_paste
     end
 end

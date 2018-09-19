@@ -120,6 +120,10 @@ static const input_function_metadata_t input_function_metadata[] = {
     {R_KILL_SELECTION, L"kill-selection"},
     {R_FORWARD_JUMP, L"forward-jump"},
     {R_BACKWARD_JUMP, L"backward-jump"},
+    {R_FORWARD_JUMP_TILL, L"forward-jump-till"},
+    {R_BACKWARD_JUMP_TILL, L"backward-jump-till"},
+    {R_REPEAT_JUMP, L"repeat-jump"},
+    {R_REVERSE_REPEAT_JUMP, L"repeat-jump-reverse"},
     {R_AND, L"and"},
     {R_CANCEL, L"cancel"}};
 
@@ -176,7 +180,15 @@ void input_set_bind_mode(const wcstring &bm) {
 
 /// Returns the arity of a given input function.
 static int input_function_arity(int function) {
-    return (function == R_FORWARD_JUMP || function == R_BACKWARD_JUMP) ? 1 : 0;
+    switch (function) {
+        case R_FORWARD_JUMP:
+        case R_BACKWARD_JUMP:
+        case R_FORWARD_JUMP_TILL:
+        case R_BACKWARD_JUMP_TILL:
+            return 1;
+        default:
+            return 0;
+    }
 }
 
 /// Sets the return status of the most recently executed input function.
@@ -260,9 +272,15 @@ void init_input() {
         input_mapping_add(L"\n", L"execute");
         input_mapping_add(L"\r", L"execute");
         input_mapping_add(L"\t", L"complete");
-        input_mapping_add(L"\x3", L"commandline \"\"");
+        input_mapping_add(L"\x3", L"commandline ''");
         input_mapping_add(L"\x4", L"exit");
         input_mapping_add(L"\x5", L"bind");
+        input_mapping_add(L"\x7f", L"backward-delete-char");
+        // Arrows - can't have functions, so *-or-search isn't available.
+        input_mapping_add(L"\x1B[A", L"up-line");
+        input_mapping_add(L"\x1B[B", L"down-line");
+        input_mapping_add(L"\x1B[C", L"forward-char");
+        input_mapping_add(L"\x1B[D", L"backward-char");
     }
 
     input_initialized = true;
@@ -310,9 +328,8 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
     // has_commands: there are shell commands that need to be evaluated
     bool has_commands = false, has_functions = false;
 
-    for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end(); it != end;
-         ++it) {
-        if (input_function_get_code(*it) != INPUT_CODE_NONE)
+    for (const wcstring &cmd : m.commands) {
+        if (input_function_get_code(cmd) != INPUT_CODE_NONE)
             has_functions = true;
         else
             has_commands = true;
@@ -347,9 +364,8 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
         // FIXME(snnw): if commands add stuff to input queue (e.g. commandline -f execute), we won't
         // see that until all other commands have also been run.
         int last_status = proc_get_last_status();
-        for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end();
-             it != end; ++it) {
-            parser_t::principal_parser().eval(it->c_str(), io_chain_t(), TOP);
+        for (const wcstring &cmd : m.commands) {
+            parser_t::principal_parser().eval(cmd.c_str(), io_chain_t(), TOP);
         }
         proc_set_last_status(last_status);
         input_common_next_ch(R_NULL);
@@ -365,36 +381,31 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
 
 /// Try reading the specified function mapping.
 static bool input_mapping_is_match(const input_mapping_t &m) {
-    wchar_t c = 0;
-    int j;
+    const wcstring &str = m.seq;
 
+    assert(str.size() > 0 && "zero-length input string passed to input_mapping_is_match!");
     debug(4, L"trying to match mapping %ls", escape_string(m.seq.c_str(), ESCAPE_ALL).c_str());
-    const wchar_t *str = m.seq.c_str();
-    for (j = 0; str[j] != L'\0'; j++) {
-        bool timed = (j > 0 && iswcntrl(str[0]));
 
-        c = input_common_readch(timed);
-        if (str[j] != c) {
-            break;
+    bool timed = false;
+    for (size_t i = 0; i < str.size(); ++i) {
+        wchar_t read = input_common_readch(timed);
+
+        if (read != str[i]) {
+            // We didn't match the bind sequence/input mapping, (it timed out or they entered something else)
+            // Undo consumption of the read characters since we didn't match the bind sequence and abort.
+            input_common_next_ch(read);
+            while (i--) {
+                input_common_next_ch(str[i]);
+            }
+            return false;
         }
+
+        // If we just read an escape, we need to add a timeout for the next char,
+        // to distinguish between the actual escape key and an "alt"-modifier.
+        timed = (str[i] == L'\x1B');
     }
 
-    if (str[j] == L'\0') {
-        // debug(0, L"matched mapping %ls (%ls)\n", escape_string(m.seq.c_str(),
-        // ESCAPE_ALL).c_str(),
-        // m.command.c_str());
-        // We matched the entire sequence.
-        return true;
-    }
-
-    // Reinsert the chars we read to be read again since we didn't match the bind sequence (i.e.,
-    // the input mapping).
-    input_common_next_ch(c);
-    for (int k = j - 1; k >= 0; k--) {
-        input_common_next_ch(m.seq[k]);
-    }
-
-    return false;
+    return true;
 }
 
 void input_queue_ch(wint_t ch) { input_common_queue_ch(ch); }

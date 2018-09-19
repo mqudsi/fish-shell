@@ -80,12 +80,21 @@ static bool path_get_path_core(const wcstring &cmd, wcstring *out_path,
             err = EACCES;
         } else {
             switch (errno) {
-                case ENOENT:
-                case ENAMETOOLONG:
                 case EACCES:
+                case ENAMETOOLONG:
+                case ENOENT:
                 case ENOTDIR: {
                     break;
                 }
+#ifdef __sun
+                //Solaris 5.11 can return any of the following three if the path
+                //does not exist. Yes, even 0. No, none of this is documented.
+                case 0:
+                case EAGAIN:
+                case EEXIST: {
+                    break;
+                }
+#endif
                 //WSL has a bug where access(2) can return EINVAL
                 //See https://github.com/Microsoft/BashOnWindows/issues/2522
                 //The only other way EINVAL can happen is if the wrong
@@ -194,9 +203,8 @@ bool path_get_cdpath(const env_var_t &dir_var, wcstring *out, const wchar_t *wd,
     }
 
     bool success = false;
-    for (wcstring_list_t::const_iterator iter = paths.begin(); iter != paths.end(); ++iter) {
+    for (const wcstring &dir : paths) {
         struct stat buf;
-        const wcstring &dir = *iter;
         if (wstat(dir, &buf) == 0) {
             if (S_ISDIR(buf.st_mode)) {
                 success = true;

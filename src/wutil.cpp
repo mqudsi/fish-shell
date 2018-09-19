@@ -12,6 +12,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#if defined(__linux__)
+#include <sys/statfs.h>
+#endif
+#include <sys/mount.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <wchar.h>
@@ -278,6 +283,32 @@ int make_fd_blocking(int fd) {
     return err == -1 ? errno : 0;
 }
 
+int fd_check_is_remote(int fd) {
+#if defined(__linux__)
+    struct statfs buf{0};
+    if (fstatfs(fd, &buf) < 0) {
+        return -1;
+    }
+    // Linux has constants for these like NFS_SUPER_MAGIC, SMB_SUPER_MAGIC, CIFS_MAGIC_NUMBER but
+    // these are in varying headers. Simply hard code them.
+    switch (buf.f_type) {
+        case 0x6969:      // NFS_SUPER_MAGIC
+        case 0x517B:      // SMB_SUPER_MAGIC
+        case 0xFF534D42:  // CIFS_MAGIC_NUMBER
+            return 1;
+        default:
+            // Other FSes are assumed local.
+            return 0;
+    }
+#elif defined(MNT_LOCAL)
+    struct statfs buf {};
+    if (fstatfs(fd, &buf) < 0) return -1;
+    return (buf.f_flags & MNT_LOCAL) ? 0 : 1;
+#else
+    return -1;
+#endif
+}
+
 static inline void safe_append(char *buffer, const char *s, size_t buffsize) {
     strncat(buffer, s, buffsize - strlen(buffer) - 1);
 }
@@ -417,8 +448,8 @@ const wcstring &wgettext(const wchar_t *in) {
     wcstring key = in;
 
     wgettext_init_if_necessary();
-    auto &&wmap = wgettext_map.acquire();
-    wcstring &val = wmap.value[key];
+    auto wmap = wgettext_map.acquire();
+    wcstring &val = (*wmap)[key];
     if (val.empty()) {
         cstring mbs_in = wcs2string(key);
         char *out = fish_gettext(mbs_in.c_str());
@@ -485,6 +516,11 @@ int fish_wcswidth(const wchar_t *str) { return fish_wcswidth(str, wcslen(str)); 
 ///
 /// See fallback.h for the normal definitions.
 int fish_wcswidth(const wcstring &str) { return fish_wcswidth(str.c_str(), str.size()); }
+
+locale_t fish_c_locale() {
+    static locale_t loc = newlocale(LC_ALL_MASK, "C", NULL);
+    return loc;
+}
 
 /// Like fish_wcstol(), but fails on a value outside the range of an int.
 ///
@@ -620,25 +656,23 @@ unsigned long long fish_wcstoull(const wchar_t *str, const wchar_t **endptr, int
     return result;
 }
 
-file_id_t file_id_t::file_id_from_stat(const struct stat *buf) {
-    assert(buf != NULL);
-
+file_id_t file_id_t::from_stat(const struct stat &buf) {
     file_id_t result = {};
-    result.device = buf->st_dev;
-    result.inode = buf->st_ino;
-    result.size = buf->st_size;
-    result.change_seconds = buf->st_ctime;
-    result.mod_seconds = buf->st_mtime;
+    result.device = buf.st_dev;
+    result.inode = buf.st_ino;
+    result.size = buf.st_size;
+    result.change_seconds = buf.st_ctime;
+    result.mod_seconds = buf.st_mtime;
 
 #ifdef HAVE_STRUCT_STAT_ST_CTIME_NSEC
-    result.change_nanoseconds = buf->st_ctime_nsec;
-    result.mod_nanoseconds = buf->st_mtime_nsec;
+    result.change_nanoseconds = buf.st_ctime_nsec;
+    result.mod_nanoseconds = buf.st_mtime_nsec;
 #elif defined(__APPLE__)
-    result.change_nanoseconds = buf->st_ctimespec.tv_nsec;
-    result.mod_nanoseconds = buf->st_mtimespec.tv_nsec;
+    result.change_nanoseconds = buf.st_ctimespec.tv_nsec;
+    result.mod_nanoseconds = buf.st_mtimespec.tv_nsec;
 #elif defined(_BSD_SOURCE) || defined(_SVID_SOURCE) || defined(_XOPEN_SOURCE)
-    result.change_nanoseconds = buf->st_ctim.tv_nsec;
-    result.mod_nanoseconds = buf->st_mtim.tv_nsec;
+    result.change_nanoseconds = buf.st_ctim.tv_nsec;
+    result.mod_nanoseconds = buf.st_mtim.tv_nsec;
 #else
     result.change_nanoseconds = 0;
     result.mod_nanoseconds = 0;
@@ -651,7 +685,7 @@ file_id_t file_id_for_fd(int fd) {
     file_id_t result = kInvalidFileID;
     struct stat buf = {};
     if (fd >= 0 && 0 == fstat(fd, &buf)) {
-        result = file_id_t::file_id_from_stat(&buf);
+        result = file_id_t::from_stat(buf);
     }
     return result;
 }
@@ -660,7 +694,7 @@ file_id_t file_id_for_path(const wcstring &path) {
     file_id_t result = kInvalidFileID;
     struct stat buf = {};
     if (0 == wstat(path, &buf)) {
-        result = file_id_t::file_id_from_stat(&buf);
+        result = file_id_t::from_stat(buf);
     }
     return result;
 }

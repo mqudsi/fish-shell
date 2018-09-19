@@ -143,21 +143,23 @@ line_t pager_t::completion_print_item(const wcstring &prefix, const comp_t *c, s
         bg_color = highlight_spec_search_match;
     }
 
+    auto bg = highlight_make_background(bg_color);
     // Print the completion part
     size_t comp_remaining = comp_width;
     for (size_t i = 0; i < c->comp.size(); i++) {
         const wcstring &comp = c->comp.at(i);
+        highlight_spec_t packed_color =
+            highlight_spec_pager_prefix | bg;
+
         if (i > 0) {
-            comp_remaining -= print_max(PAGER_SPACER_STRING, highlight_spec_normal, comp_remaining,
+            comp_remaining -= print_max(PAGER_SPACER_STRING, bg, comp_remaining,
                                         true /* has_more */, &line_data);
         }
 
-        highlight_spec_t packed_color =
-            highlight_spec_pager_prefix | highlight_make_background(bg_color);
         comp_remaining -=
             print_max(prefix, packed_color, comp_remaining, !comp.empty(), &line_data);
 
-        packed_color = highlight_spec_pager_completion | highlight_make_background(bg_color);
+        packed_color = highlight_spec_pager_completion | bg;
         comp_remaining -=
             print_max(comp, packed_color, comp_remaining, i + 1 < c->comp.size(), &line_data);
     }
@@ -165,9 +167,9 @@ line_t pager_t::completion_print_item(const wcstring &prefix, const comp_t *c, s
     size_t desc_remaining = width - comp_width + comp_remaining;
     if (c->desc_width > 0 && desc_remaining > 4) {
         highlight_spec_t desc_color =
-            highlight_spec_pager_description | highlight_make_background(bg_color);
+            highlight_spec_pager_description | bg;
         highlight_spec_t punct_color =
-            highlight_spec_pager_completion | highlight_make_background(bg_color);
+            highlight_spec_pager_completion | bg;
 
         // always have at least two spaces to separate completion and description
         desc_remaining -= print_max(L"  ", punct_color, 2, false, &line_data);
@@ -184,7 +186,7 @@ line_t pager_t::completion_print_item(const wcstring &prefix, const comp_t *c, s
         desc_remaining -= print_max(L")", punct_color, 1, false, &line_data);
     } else {
         // No description, or it won't fit. Just add spaces.
-        print_max(wcstring(desc_remaining, L' '), 0, desc_remaining, false, &line_data);
+        print_max(wcstring(desc_remaining, L' '), bg, desc_remaining, false, &line_data);
     }
 
     return line_data;
@@ -304,7 +306,7 @@ static comp_info_list_t process_completions_into_infos(const completion_list_t &
         comp_t *comp_info = &result.at(i);
 
         // Append the single completion string. We may later merge these into multiple.
-        comp_info->comp.push_back(escape_string(comp.completion, ESCAPE_ALL | ESCAPE_NO_QUOTED));
+        comp_info->comp.push_back(escape_string(comp.completion, ESCAPE_NO_QUOTED));
 
         // Append the mangled description.
         comp_info->desc = comp.description;
@@ -481,16 +483,13 @@ bool pager_t::completion_try_print(size_t cols, const wcstring &prefix, const co
     assert(stop_row - start_row <= term_height);
     completion_print(cols, width_by_column, start_row, stop_row, prefix, lst, rendering);
 
-    // Ellipsis helper string. Either empty or containing the ellipsis char.
-    const wchar_t ellipsis_string[] = {ellipsis_char == L'\x2026' ? L'\x2026' : L'\0', L'\0'};
-
     // Add the progress line. It's a "more to disclose" line if necessary, or a row listing if
     // it's scrollable; otherwise ignore it.
     // We should never have one row remaining to disclose (else we would have just disclosed it)
     wcstring progress_text;
     assert(rendering->remaining_to_disclose != 1);
     if (rendering->remaining_to_disclose > 1) {
-        progress_text = format_string(_(L"%lsand %lu more rows"), ellipsis_string,
+        progress_text = format_string(_(L"%lsand %lu more rows"), ellipsis_str,
                                       (unsigned long)rendering->remaining_to_disclose);
     } else if (start_row > 0 || stop_row < row_count) {
         // We have a scrollable interface. The +1 here is because we are zero indexed, but want

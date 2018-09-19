@@ -2,6 +2,75 @@
 # see https://github.com/fish-shell/fish-shell/blob/master/share/functions/__fish_seen_subcommand_from.fish
 # and https://github.com/fish-shell/fish-shell/blob/master/share/functions/__fish_use_subcommand.fish
 
+# If all-the-package-names is installed, it will be used to generate npm completions.
+# Install globally with `sudo npm install -g all-the-package-names`. Keep it up to date.
+function __yarn_list_packages
+    if not type -q all-the-package-names
+        return
+    end
+
+    all-the-package-names
+end
+
+# Entire list of packages is too long to be used in a `complete` subcommand
+# Search it for matches instead
+function __yarn_filtered_list_packages
+    __yarn_list_packages | grep (commandline -ct) | head -n 50
+end
+
+function __yarn_find_package_json
+    set parents (__fish_parent_directories (pwd))
+
+    for p in $parents
+        if test -f "$p/package.json"
+            echo "$p/package.json"
+            return 0
+        end
+    end
+
+    return 1
+end
+
+function __yarn_installed_packages
+    set -l package_json (__yarn_find_package_json)
+    if not test $status -eq 0
+        # no package.json in tree
+        return 1
+    end
+
+    if type -q jq
+        jq -r '.dependencies as $a1 | .devDependencies as $a2 | ($a1 + $a2) | to_entries[] | .key' $package_json
+    else
+        set -l depsFound 0
+        for line in (cat $package_json)
+            # echo "evaluating $line"
+            if test $depsFound -eq 0
+                # echo "mode: noDeps"
+                if string match -qr '(devD|d)ependencies"' -- $line
+                    # echo "switching to mode: deps"
+                    set depsFound 1
+                    continue
+                end
+                continue
+            end
+
+            if string match -qr '\}' -- $line
+                # echo "switching to mode: noDeps"
+                set depsFound 0
+                continue
+            end
+
+            # echo "mode: deps"
+
+            string replace -r '^\s*"([^"]+)".*' '$1' -- $line
+        end
+    end
+end
+
+
+complete -f -c yarn -n '__fish_seen_subcommand_from remove' -xa '(__yarn_installed_packages)'
+complete -f -c yarn -n '__fish_seen_subcommand_from add' -a '(__yarn_filtered_list_packages)'
+
 complete -f -c yarn -n '__fish_use_subcommand' -a help
 
 complete -f -c yarn -n '__fish_use_subcommand' -a access

@@ -16,6 +16,7 @@
 #include "common.h"
 #include "expand.h"
 #include "fallback.h"  // IWYU pragma: keep
+#include "future_feature_flags.h"
 #include "parse_constants.h"
 #include "parse_util.h"
 #include "tnode.h"
@@ -418,14 +419,18 @@ void parse_util_token_extent(const wchar_t *buff, size_t cursor_pos, const wchar
 wcstring parse_util_unescape_wildcards(const wcstring &str) {
     wcstring result;
     result.reserve(str.size());
+    bool unesc_qmark = !feature_test(features_t::qmark_noglob);
 
     const wchar_t *const cs = str.c_str();
     for (size_t i = 0; cs[i] != L'\0'; i++) {
         if (cs[i] == L'*') {
             result.push_back(ANY_STRING);
-        } else if (cs[i] == L'?') {
+        } else if (cs[i] == L'?' && unesc_qmark) {
             result.push_back(ANY_CHAR);
-        } else if (cs[i] == L'\\' && (cs[i + 1] == L'*' || cs[i + 1] == L'?')) {
+        } else if (cs[i] == L'\\' && cs[i + 1] == L'*') {
+            result.push_back(cs[i + 1]);
+            i += 1;
+        } else if (cs[i] == L'\\' && cs[i + 1] == L'?' && unesc_qmark) {
             result.push_back(cs[i + 1]);
             i += 1;
         } else if (cs[i] == L'\\' && cs[i + 1] == L'\\') {
@@ -834,14 +839,14 @@ void parse_util_expand_variable_error(const wcstring &token, size_t global_token
     wchar_t char_after_dollar = dollar_pos + 1 >= token.size() ? 0 : token.at(dollar_pos + 1);
 
     switch (char_after_dollar) {
-        case BRACKET_BEGIN:
+        case BRACE_BEGIN:
         case L'{': {
-            // The BRACKET_BEGIN is for unquoted, the { is for quoted. Anyways we have (possible
+            // The BRACE_BEGIN is for unquoted, the { is for quoted. Anyways we have (possible
             // quoted) ${. See if we have a }, and the stuff in between is variable material. If so,
             // report a bracket error. Otherwise just complain about the ${.
             bool looks_like_variable = false;
             size_t closing_bracket =
-                token.find(char_after_dollar == L'{' ? L'}' : wchar_t(BRACKET_END), dollar_pos + 2);
+                token.find(char_after_dollar == L'{' ? L'}' : wchar_t(BRACE_END), dollar_pos + 2);
             wcstring var_name;
             if (closing_bracket != wcstring::npos) {
                 size_t var_start = dollar_pos + 2, var_end = closing_bracket;
@@ -1047,6 +1052,7 @@ parser_test_error_bits_t parse_util_detect_errors_in_argument(tnode_t<grammar::a
 /// Given that the job given by node should be backgrounded, return true if we detect any errors.
 static bool detect_errors_in_backgrounded_job(tnode_t<grammar::job> job,
                                               parse_error_list_t *parse_errors) {
+    namespace g = grammar;
     auto source_range = job.source_range();
     if (!source_range) return false;
 
@@ -1056,29 +1062,30 @@ static bool detect_errors_in_backgrounded_job(tnode_t<grammar::job> job,
     // foo & ; or bar
     // if foo & ; end
     // while foo & ; end
-    if (job.try_get_parent<grammar::if_clause>()) {
+    auto job_conj = job.try_get_parent<g::job_conjunction>();
+    if (job_conj.try_get_parent<g::if_clause>()) {
         errored = append_syntax_error(parse_errors, source_range->start,
                                       BACKGROUND_IN_CONDITIONAL_ERROR_MSG);
-    } else if (job.try_get_parent<grammar::while_header>()) {
+    } else if (job_conj.try_get_parent<g::while_header>()) {
         errored = append_syntax_error(parse_errors, source_range->start,
                                       BACKGROUND_IN_CONDITIONAL_ERROR_MSG);
-    } else if (auto job_list = job.try_get_parent<grammar::job_list>()) {
+    } else if (auto jlist = job_conj.try_get_parent<g::job_list>()) {
         // This isn't very complete, e.g. we don't catch 'foo & ; not and bar'.
-        // Build the job list and then advance it by one.
-        auto first_job = job_list.next_in_list<grammar::job>();
-        assert(first_job == job && "Expected first job to be the node we found");
-        (void)first_job;
-        // Try getting the next job as a boolean statement.
-        auto next_job = job_list.next_in_list<grammar::job>();
-        tnode_t<grammar::statement> next_stmt = next_job.child<0>();
-        if (auto bool_stmt = next_stmt.try_get_child<grammar::boolean_statement, 0>()) {
+        // Fetch the job list and then advance it by one.
+        auto first_jconj = jlist.next_in_list<g::job_conjunction>();
+        assert(first_jconj == job.try_get_parent<g::job_conjunction>() &&
+               "Expected first job to be the node we found");
+        (void)first_jconj;
+
+        // Try getting the next job's decorator.
+        if (auto next_job_dec = jlist.next_in_list<g::job_decorator>()) {
             // The next job is indeed a boolean statement.
-            parse_bool_statement_type_t bool_type = bool_statement_type(bool_stmt);
-            if (bool_type == parse_bool_and) {  // this is not allowed
-                errored = append_syntax_error(parse_errors, bool_stmt.source_range()->start,
+            parse_bool_statement_type_t bool_type = bool_statement_type(next_job_dec);
+            if (bool_type == parse_bool_and) {
+                errored = append_syntax_error(parse_errors, next_job_dec.source_range()->start,
                                               BOOL_AFTER_BACKGROUND_ERROR_MSG, L"and");
-            } else if (bool_type == parse_bool_or) {  // this is not allowed
-                errored = append_syntax_error(parse_errors, bool_stmt.source_range()->start,
+            } else if (bool_type == parse_bool_or) {
+                errored = append_syntax_error(parse_errors, next_job_dec.source_range()->start,
                                               BOOL_AFTER_BACKGROUND_ERROR_MSG, L"or");
             }
         }
@@ -1096,7 +1103,8 @@ static bool detect_errors_in_plain_statement(const wcstring &buff_src,
 
     // In a few places below, we want to know if we are in a pipeline.
     tnode_t<statement> st = pst.try_get_parent<decorated_statement>().try_get_parent<statement>();
-    const bool is_in_pipeline = statement_is_in_pipeline(st, true /* count first */);
+    pipeline_position_t pipe_pos = get_pipeline_position(st);
+    bool is_in_pipeline = (pipe_pos != pipeline_position_t::none);
 
     // We need to know the decoration.
     const enum parse_statement_decoration_t decoration = get_decoration(pst);
@@ -1106,14 +1114,25 @@ static bool detect_errors_in_plain_statement(const wcstring &buff_src,
         errored = append_syntax_error(parse_errors, source_start, EXEC_ERR_MSG, L"exec");
     }
 
-    if (maybe_t<wcstring> mcommand = command_for_plain_statement(pst, buff_src)) {
-        wcstring command = std::move(*mcommand);
+    // This is a somewhat stale check that 'and' and 'or' are not in pipelines, except at the
+    // beginning. We can't disallow them as commands entirely because we need to support 'and
+    // --help', etc.
+    if (pipe_pos == pipeline_position_t::subsequent) {
+        // check if our command is 'and' or 'or'. This is very clumsy; we don't catch e.g. quoted
+        // commands.
+        wcstring command = pst.child<0>().get_source(buff_src);
+        if (command == L"and" || command == L"or") {
+            errored =
+                append_syntax_error(parse_errors, source_start, EXEC_ERR_MSG, command.c_str());
+        }
+    }
+
+    if (maybe_t<wcstring> unexp_command = command_for_plain_statement(pst, buff_src)) {
+        wcstring command;
         // Check that we can expand the command.
-        if (!expand_one(command, EXPAND_SKIP_CMDSUBST | EXPAND_SKIP_VARIABLES | EXPAND_SKIP_JOBS,
-                        NULL)) {
-            // TODO: leverage the resulting errors.
-            errored = append_syntax_error(parse_errors, source_start, ILLEGAL_CMD_ERR_MSG,
-                                          command.c_str());
+        if (expand_to_command_and_args(*unexp_command, &command, nullptr, parse_errors) ==
+            EXPAND_ERROR) {
+            errored = true;
         }
 
         // Check that pipes are sound.
@@ -1250,16 +1269,9 @@ parser_test_error_bits_t parse_util_detect_errors(const wcstring &buff_src,
                 has_unclosed_block = true;
             } else if (node.type == symbol_statement && !node.has_source()) {
                 // Check for a statement without source in a pipeline, i.e. unterminated pipeline.
-                has_unclosed_pipe |= statement_is_in_pipeline({&node_tree, &node}, false);
-            } else if (node.type == symbol_boolean_statement) {
-                // 'or' and 'and' can be in a pipeline, as long as they're first.
-                tnode_t<g::boolean_statement> gbs{&node_tree, &node};
-                parse_bool_statement_type_t type = bool_statement_type(gbs);
-                if ((type == parse_bool_and || type == parse_bool_or) &&
-                    statement_is_in_pipeline(gbs.try_get_parent<g::statement>(),
-                                             false /* don't count first */)) {
-                    errored = append_syntax_error(&parse_errors, node.source_start, EXEC_ERR_MSG,
-                                                  (type == parse_bool_and) ? L"and" : L"or");
+                auto pipe_pos = get_pipeline_position({&node_tree, &node});
+                if (pipe_pos != pipeline_position_t::none) {
+                    has_unclosed_pipe = true;
                 }
             } else if (node.type == symbol_argument) {
                 tnode_t<g::argument> arg{&node_tree, &node};

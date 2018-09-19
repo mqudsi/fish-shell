@@ -45,6 +45,7 @@
 #include "expand.h"
 #include "fallback.h"  // IWYU pragma: keep
 #include "function.h"
+#include "future_feature_flags.h"
 #include "highlight.h"
 #include "history.h"
 #include "input.h"
@@ -124,7 +125,7 @@ static void err(const wchar_t *blah, ...) {
 
     // Show errors in red.
     if (colorize) {
-        fputws(L"\e[31m", stdout);
+        fputws(L"\x1B[31m", stdout);
     }
     fwprintf(stdout, L"Error: ");
     vfwprintf(stdout, blah, va);
@@ -132,7 +133,7 @@ static void err(const wchar_t *blah, ...) {
 
     // Return to normal color.
     if (colorize) {
-        fputws(L"\e[0m", stdout);
+        fputws(L"\x1B[0m", stdout);
     }
 
     fwprintf(stdout, L"\n");
@@ -535,10 +536,14 @@ static void test_tokenizer() {
     const wchar_t *str =
         L"string <redirection  2>&1 'nested \"quoted\" '(string containing subshells "
         L"){and,brackets}$as[$well (as variable arrays)] not_a_redirect^ ^ ^^is_a_redirect "
+        L"&&& ||| "
+        L"&& || & |"
         L"Compress_Newlines\n  \n\t\n   \nInto_Just_One";
-    const int types[] = {TOK_STRING, TOK_REDIRECT, TOK_STRING,   TOK_REDIRECT, TOK_STRING,
-                         TOK_STRING, TOK_STRING,   TOK_REDIRECT, TOK_REDIRECT, TOK_STRING,
-                         TOK_STRING, TOK_END,      TOK_STRING};
+    const int types[] = {TOK_STRING, TOK_REDIRECT,   TOK_STRING,   TOK_REDIRECT, TOK_STRING,
+                         TOK_STRING, TOK_STRING,     TOK_REDIRECT, TOK_REDIRECT, TOK_STRING,
+                         TOK_ANDAND, TOK_BACKGROUND, TOK_OROR,     TOK_PIPE,     TOK_ANDAND,
+                         TOK_OROR,   TOK_BACKGROUND, TOK_PIPE,     TOK_STRING,   TOK_END,
+                         TOK_STRING};
 
     say(L"Test correct tokenization");
 
@@ -572,6 +577,15 @@ static void test_tokenizer() {
         do_test(token.type == TOK_ERROR);
         do_test(token.error == TOK_UNTERMINATED_ESCAPE);
         do_test(token.error_offset == 3);
+    }
+
+    {
+        tokenizer_t t(L"abc )defg(hij", 0);
+        do_test(t.next(&token));
+        do_test(t.next(&token));
+        do_test(token.type == TOK_ERROR);
+        do_test(token.error == TOK_CLOSING_UNOPENED_SUBSHELL);
+        do_test(token.error_offset == 4);
     }
 
     {
@@ -613,6 +627,16 @@ static void test_tokenizer() {
         err(L"redirection_type_for_string failed on line %ld", (long)__LINE__);
     if (redirection_type_for_string(L"2>|"))
         err(L"redirection_type_for_string failed on line %ld", (long)__LINE__);
+
+    // Test ^ with our feature flag on and off.
+    auto saved_flags = fish_features();
+    mutable_fish_features().set(features_t::stderr_nocaret, false);
+    if (redirection_type_for_string(L"^") != redirection_type_t::overwrite)
+        err(L"redirection_type_for_string failed on line %ld", (long)__LINE__);
+    mutable_fish_features().set(features_t::stderr_nocaret, true);
+    if (redirection_type_for_string(L"^") != none())
+        err(L"redirection_type_for_string failed on line %ld", (long)__LINE__);
+    mutable_fish_features() = saved_flags;
 }
 
 // Little function that runs in a background thread, bouncing to the main.
@@ -834,6 +858,38 @@ static void test_parser() {
         err(L"backgrounded 'while' conditional not reported as error");
     }
 
+    if (!parse_util_detect_errors(L"true | || false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"|| false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"&& false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"true ; && false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"true ; || false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"true || && false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"true && || false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
+    if (!parse_util_detect_errors(L"true && && false")) {
+        err(L"bogus boolean statement error not detected on line %d", __LINE__);
+    }
+
     say(L"Testing basic evaluation");
 
     // Ensure that we don't crash on infinite self recursion and mutual recursion. These must use
@@ -873,9 +929,9 @@ static void test_1_cancellation(const wchar_t *src) {
     });
     parser_t::principal_parser().eval(src, io_chain, TOP);
     out_buff->read();
-    if (out_buff->out_buffer_size() != 0) {
+    if (out_buff->buffer().size() != 0) {
         err(L"Expected 0 bytes in out_buff, but instead found %lu bytes\n",
-            out_buff->out_buffer_size());
+            out_buff->buffer().size());
     }
     iothread_drain_all();
 }
@@ -1309,30 +1365,58 @@ static void test_utf8() {
 #endif
 }
 
+static void test_feature_flags() {
+    say(L"Testing future feature flags");
+    using ft = features_t;
+    ft f;
+    do_test(!f.test(ft::stderr_nocaret));
+    f.set(ft::stderr_nocaret, true);
+    do_test(f.test(ft::stderr_nocaret));
+    f.set(ft::stderr_nocaret, false);
+    do_test(!f.test(ft::stderr_nocaret));
+
+    f.set_from_string(L"stderr-nocaret,nonsense");
+    do_test(f.test(ft::stderr_nocaret));
+    f.set_from_string(L"stderr-nocaret,no-stderr-nocaret,nonsense");
+    do_test(!f.test(ft::stderr_nocaret));
+
+    // Ensure every metadata is represented once.
+    size_t counts[ft::flag_count] = {};
+    for (const auto &md : ft::metadata) {
+        counts[md.flag]++;
+    }
+    for (size_t c : counts) {
+        do_test(c == 1);
+    }
+    do_test(ft::metadata[ft::stderr_nocaret].name == wcstring(L"stderr-nocaret"));
+    do_test(ft::metadata_for(L"stderr-nocaret") == &ft::metadata[ft::stderr_nocaret]);
+    do_test(ft::metadata_for(L"not-a-flag") == nullptr);
+}
+
 static void test_escape_sequences() {
     say(L"Testing escape_sequences");
     if (escape_code_length(L"") != 0) err(L"test_escape_sequences failed on line %d\n", __LINE__);
     if (escape_code_length(L"abcd") != 0)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e[2J") != 4)
+    if (escape_code_length(L"\x1B[2J") != 4)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e[38;5;123mABC") != strlen("\e[38;5;123m"))
+    if (escape_code_length(L"\x1B[38;5;123mABC") != strlen("\x1B[38;5;123m"))
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e@") != 2)
+    if (escape_code_length(L"\x1B@") != 2)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
 
     // iTerm2 escape sequences.
-    if (escape_code_length(L"\e]50;CurrentDir=test/foo\x07NOT_PART_OF_SEQUENCE") != 25)
+    if (escape_code_length(L"\x1B]50;CurrentDir=test/foo\x07NOT_PART_OF_SEQUENCE") != 25)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e]50;SetMark\x07NOT_PART_OF_SEQUENCE") != 13)
+    if (escape_code_length(L"\x1B]50;SetMark\x07NOT_PART_OF_SEQUENCE") != 13)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e]6;1;bg;red;brightness;255\x07NOT_PART_OF_SEQUENCE") != 28)
+    if (escape_code_length(L"\x1B]6;1;bg;red;brightness;255\x07NOT_PART_OF_SEQUENCE") != 28)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e]Pg4040ff\e\\NOT_PART_OF_SEQUENCE") != 12)
+    if (escape_code_length(L"\x1B]Pg4040ff\x1B\\NOT_PART_OF_SEQUENCE") != 12)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e]blahblahblah\e\\") != 16)
+    if (escape_code_length(L"\x1B]blahblahblah\x1B\\") != 16)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
-    if (escape_code_length(L"\e]blahblahblah\x07") != 15)
+    if (escape_code_length(L"\x1B]blahblahblah\x07") != 15)
         err(L"test_escape_sequences failed on line %d\n", __LINE__);
 }
 
@@ -1464,12 +1548,11 @@ static bool expand_test(const wchar_t *in, expand_flags_t flags, ...) {
         if (arg) {
             wcstring msg = L"Expected [";
             bool first = true;
-            for (wcstring_list_t::const_iterator it = expected.begin(), end = expected.end();
-                 it != end; ++it) {
+            for (const wcstring &exp : expected) {
                 if (!first) msg += L", ";
                 first = false;
                 msg += '"';
-                msg += *it;
+                msg += exp;
                 msg += '"';
             }
             msg += L"], found [";
@@ -2075,14 +2158,16 @@ static void test_test_brackets() {
     parser_t parser;
     io_streams_t streams(0);
 
-    const wchar_t *argv1[] = {L"[", L"foo", NULL};
-    do_test(builtin_test(parser, streams, (wchar_t **)argv1) != 0);
+    null_terminated_array_t<wchar_t> args;
 
-    const wchar_t *argv2[] = {L"[", L"foo", L"]", NULL};
-    do_test(builtin_test(parser, streams, (wchar_t **)argv2) == 0);
+    args.set({L"[", L"foo"});
+    do_test(builtin_test(parser, streams, args.get()) != 0);
 
-    const wchar_t *argv3[] = {L"[", L"foo", L"]", L"bar", NULL};
-    do_test(builtin_test(parser, streams, (wchar_t **)argv3) != 0);
+    args.set({L"[", L"foo", L"]"});
+    do_test(builtin_test(parser, streams, args.get()) == 0);
+
+    args.set({L"[", L"foo", L"]", L"bar"});
+    do_test(builtin_test(parser, streams, args.get()) != 0);
 }
 
 static void test_test() {
@@ -2163,6 +2248,18 @@ static void test_test() {
     // https://github.com/fish-shell/fish-shell/issues/601
     do_test(run_test_test(0, L"-S = -S"));
     do_test(run_test_test(1, L"! ! ! A"));
+
+    // Verify that 1. doubles are treated as doubles, and 2. integers that cannot be represented as
+    // doubles are still treated as integers.
+    do_test(run_test_test(0, L"4611686018427387904 -eq 4611686018427387904"));
+    do_test(run_test_test(0, L"4611686018427387904.0 -eq 4611686018427387904.0"));
+    do_test(run_test_test(0, L"4611686018427387904.00000000000000001 -eq 4611686018427387904.0"));
+    do_test(run_test_test(1, L"4611686018427387904 -eq 4611686018427387905"));
+    do_test(run_test_test(0, L"-4611686018427387904 -ne 4611686018427387904"));
+    do_test(run_test_test(0, L"-4611686018427387904 -le 4611686018427387904"));
+    do_test(run_test_test(1, L"-4611686018427387904 -ge 4611686018427387904"));
+    do_test(run_test_test(1, L"4611686018427387904 -gt 4611686018427387904"));
+    do_test(run_test_test(0, L"4611686018427387904 -ge 4611686018427387904"));
 }
 
 /// Testing colors.
@@ -2309,6 +2406,19 @@ static void test_complete() {
     complete(L"cat te", &completions, COMPLETION_REQUEST_DEFAULT);
     do_test(completions.size() == 1);
     do_test(completions.at(0).completion == L"stfile");
+    do_test(!(completions.at(0).flags & COMPLETE_REPLACES_TOKEN));
+    do_test(!(completions.at(0).flags & COMPLETE_DUPLICATES_ARGUMENT));
+    completions.clear();
+    complete(L"cat testfile te", &completions, COMPLETION_REQUEST_DEFAULT);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"stfile");
+    do_test(completions.at(0).flags & COMPLETE_DUPLICATES_ARGUMENT);
+    completions.clear();
+    complete(L"cat testfile TE", &completions, COMPLETION_REQUEST_DEFAULT);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"testfile");
+    do_test(completions.at(0).flags & COMPLETE_REPLACES_TOKEN);
+    do_test(completions.at(0).flags & COMPLETE_DUPLICATES_ARGUMENT);
     completions.clear();
     complete(L"something --abc=te", &completions, COMPLETION_REQUEST_DEFAULT);
     do_test(completions.size() == 1);
@@ -2578,7 +2688,7 @@ static void test_autosuggest_suggest_special() {
     perform_one_completion_cd_test(L"cd ~hahaha/", L"path1/", __LINE__);
 
     popd();
-    system("rmdir ~/test_autosuggest_suggest_special/");
+    (void)system("rmdir ~/test_autosuggest_suggest_special/");
 }
 
 static void perform_one_autosuggestion_should_ignore_test(const wcstring &command, long line) {
@@ -2617,19 +2727,17 @@ static void test_autosuggestion_combining() {
     do_test(combine_command_and_autosuggestion(L"alpha", L"ALPHA") == L"alpha");
 }
 
-static void test_history_matches(history_search_t &search, size_t matches, unsigned from_line) {
-    size_t i;
-    for (i = 0; i < matches; i++) {
-        do_test(search.go_backwards());
+static void test_history_matches(history_search_t &search, const wcstring_list_t &expected,
+                                 unsigned from_line) {
+    wcstring_list_t found;
+    while (search.go_backwards()) {
+        found.push_back(search.current_string());
     }
-    // do_test_from(!search.go_backwards(), from_line);
-    bool result = search.go_backwards();
-    do_test_from(!result, from_line);
-
-    for (i = 1; i < matches; i++) {
-        do_test_from(search.go_forwards(), from_line);
+    do_test_from(expected == found, from_line);
+    if (expected != found) {
+        fprintf(stderr, "Expected %ls, found %ls\n", comma_join(expected).c_str(),
+                comma_join(found).c_str());
     }
-    do_test_from(!search.go_forwards(), from_line);
 }
 
 static bool history_contains(history_t *history, const wcstring &txt) {
@@ -2710,7 +2818,7 @@ static void test_universal() {
 
     env_universal_t uvars(UVARS_TEST_PATH);
     callback_data_list_t callbacks;
-    bool loaded = uvars.load(callbacks);
+    bool loaded = uvars.initialize(callbacks);
     if (!loaded) {
         err(L"Failed to load universal variables");
     }
@@ -2733,7 +2841,7 @@ static void test_universal() {
             }
         }
     }
-    system("rm -Rf test/fish_uvars_test/");
+    (void)system("rm -Rf test/fish_uvars_test/");
 }
 
 static bool callback_data_less_than(const callback_data_t &a, const callback_data_t &b) {
@@ -2788,7 +2896,7 @@ static void test_universal_callbacks() {
     do_test(callbacks.at(2).type == ERASE);
     do_test(callbacks.at(2).key == L"delta");
     do_test(callbacks.at(2).val == L"");
-    system("rm -Rf test/fish_uvars_test/");
+    (void)system("rm -Rf test/fish_uvars_test/");
 }
 
 bool poll_notifier(const std::unique_ptr<universal_notifier_t> &note) {
@@ -2917,65 +3025,82 @@ static wcstring random_string() {
     return result;
 }
 
+// Helper to lowercase a string.
+static wcstring lower(const wcstring &s) {
+    wcstring result;
+    for (wchar_t c : s) {
+        result.push_back(towlower(c));
+    }
+    return result;
+}
+
 void history_tests_t::test_history() {
     history_search_t searcher;
     say(L"Testing history");
 
+    const wcstring_list_t items = {L"Gamma", L"beta",  L"BetA", L"Beta", L"alpha",
+                                   L"AlphA", L"Alpha", L"alph", L"ALPH", L"ZZZ"};
+    const history_search_flags_t nocase = history_search_ignore_case;
+
+    // Populate a history.
     history_t &history = history_t::history_with_name(L"test_history");
     history.clear();
-    history.add(L"Gamma");
-    history.add(L"beta");
-    history.add(L"BetA");
-    history.add(L"Beta");
-    history.add(L"alpha");
-    history.add(L"AlphA");
-    history.add(L"Alpha");
-    history.add(L"alph");
-    history.add(L"ALPH");
-    history.add(L"ZZZ");
+    for (const wcstring &s : items) {
+        history.add(s);
+    }
+
+    // Helper to set expected items to those matching a predicate, in reverse order.
+    wcstring_list_t expected;
+    auto set_expected = [&](const std::function<bool(const wcstring &)> &filt) {
+        expected.clear();
+        for (const auto &s : items) {
+            if (filt(s)) expected.push_back(s);
+        }
+        std::reverse(expected.begin(), expected.end());
+    };
 
     // Items matching "a", case-sensitive.
     searcher = history_search_t(history, L"a");
-    test_history_matches(searcher, 6, __LINE__);
-    do_test(searcher.current_string() == L"alph");
+    set_expected([](const wcstring &s) { return s.find(L'a') != wcstring::npos; });
+    test_history_matches(searcher, expected, __LINE__);
 
-    // Items matching "alpha", case-insensitive. Note that HISTORY_SEARCH_TYPE_CONTAINS but we have
-    // to explicitly specify it in order to be able to pass false for the case_sensitive parameter.
-    searcher = history_search_t(history, L"AlPhA", HISTORY_SEARCH_TYPE_CONTAINS, false);
-    test_history_matches(searcher, 3, __LINE__);
-    do_test(searcher.current_string() == L"Alpha");
+    // Items matching "alpha", case-insensitive.
+    searcher = history_search_t(history, L"AlPhA", HISTORY_SEARCH_TYPE_CONTAINS, nocase);
+    set_expected([](const wcstring &s) { return lower(s).find(L"alpha") != wcstring::npos; });
+    test_history_matches(searcher, expected, __LINE__);
 
     // Items matching "et", case-sensitive.
     searcher = history_search_t(history, L"et");
-    test_history_matches(searcher, 3, __LINE__);
-    do_test(searcher.current_string() == L"Beta");
+    set_expected([](const wcstring &s) { return s.find(L"et") != wcstring::npos; });
+    test_history_matches(searcher, expected, __LINE__);
 
     // Items starting with "be", case-sensitive.
-    searcher = history_search_t(history, L"be", HISTORY_SEARCH_TYPE_PREFIX, true);
-    test_history_matches(searcher, 1, __LINE__);
-    do_test(searcher.current_string() == L"beta");
+    searcher = history_search_t(history, L"be", HISTORY_SEARCH_TYPE_PREFIX, 0);
+    set_expected([](const wcstring &s) { return string_prefixes_string(L"be", s); });
+    test_history_matches(searcher, expected, __LINE__);
 
     // Items starting with "be", case-insensitive.
-    searcher = history_search_t(history, L"be", HISTORY_SEARCH_TYPE_PREFIX, false);
-    test_history_matches(searcher, 3, __LINE__);
-    do_test(searcher.current_string() == L"Beta");
+    searcher = history_search_t(history, L"be", HISTORY_SEARCH_TYPE_PREFIX, nocase);
+    set_expected(
+        [](const wcstring &s) { return string_prefixes_string_case_insensitive(L"be", s); });
+    test_history_matches(searcher, expected, __LINE__);
 
-    // Items exactly matchine "alph", case-sensitive.
-    searcher = history_search_t(history, L"alph", HISTORY_SEARCH_TYPE_EXACT, true);
-    test_history_matches(searcher, 1, __LINE__);
-    do_test(searcher.current_string() == L"alph");
+    // Items exactly matching "alph", case-sensitive.
+    searcher = history_search_t(history, L"alph", HISTORY_SEARCH_TYPE_EXACT, 0);
+    set_expected([](const wcstring &s) { return s == L"alph"; });
+    test_history_matches(searcher, expected, __LINE__);
 
-    // Items exactly matchine "alph", case-insensitive.
-    searcher = history_search_t(history, L"alph", HISTORY_SEARCH_TYPE_EXACT, false);
-    test_history_matches(searcher, 2, __LINE__);
-    do_test(searcher.current_string() == L"ALPH");
+    // Items exactly matching "alph", case-insensitive.
+    searcher = history_search_t(history, L"alph", HISTORY_SEARCH_TYPE_EXACT, nocase);
+    set_expected([](const wcstring &s) { return lower(s) == L"alph"; });
+    test_history_matches(searcher, expected, __LINE__);
 
     // Test item removal case-sensitive.
     searcher = history_search_t(history, L"Alpha");
-    test_history_matches(searcher, 1, __LINE__);
+    test_history_matches(searcher, {L"Alpha"}, __LINE__);
     history.remove(L"Alpha");
     searcher = history_search_t(history, L"Alpha");
-    test_history_matches(searcher, 0, __LINE__);
+    test_history_matches(searcher, {}, __LINE__);
 
     // Test history escaping and unescaping, yaml, etc.
     history_item_list_t before, after;
@@ -3392,7 +3517,7 @@ void history_tests_t::test_history_speed(void)
 #endif
 
 static void test_new_parser_correctness() {
-    say(L"Testing new parser!");
+    say(L"Testing parser correctness");
     const struct parser_test_t {
         const wchar_t *src;
         bool ok;
@@ -3410,6 +3535,11 @@ static void test_new_parser_correctness() {
         {L"begin; end", true},
         {L"begin if true; end; end;", true},
         {L"begin if true ; echo hi ; end; end", true},
+        {L"true && false || false", true},
+        {L"true || false; and true", true},
+        {L"true || ||", false},
+        {L"|| true", false},
+        {L"true || \n\n false", true},
     };
 
     for (size_t i = 0; i < sizeof parser_tests / sizeof *parser_tests; i++) {
@@ -3417,8 +3547,6 @@ static void test_new_parser_correctness() {
 
         parse_node_tree_t parse_tree;
         bool success = parse_tree_from_string(test->src, parse_flag_none, &parse_tree, NULL);
-        say(L"%lu / %lu: Parse \"%ls\": %s", i + 1, sizeof parser_tests / sizeof *parser_tests,
-            test->src, success ? "yes" : "no");
         if (success && !test->ok) {
             err(L"\"%ls\" should NOT have parsed, but did", test->src);
         } else if (!success && test->ok) {
@@ -3624,9 +3752,6 @@ static void test_new_parser_errors() {
 
         {L"case", parse_error_unbalancing_case},
         {L"if true ; case ; end", parse_error_unbalancing_case},
-
-        {L"foo || bar", parse_error_double_pipe},
-        {L"foo && bar", parse_error_double_background},
     };
 
     for (size_t i = 0; i < sizeof tests / sizeof *tests; i++) {
@@ -3742,9 +3867,7 @@ static void test_error_messages() {
                        {L"echo \"foo\"$\"bar\"", ERROR_NO_VAR_NAME},
                        {L"echo foo $ bar", ERROR_NO_VAR_NAME},
                        {L"echo foo$(foo)bar", ERROR_BAD_VAR_SUBCOMMAND1},
-                       {L"echo \"foo$(foo)bar\"", ERROR_BAD_VAR_SUBCOMMAND1},
-                       {L"echo foo || echo bar", ERROR_BAD_OR},
-                       {L"echo foo && echo bar", ERROR_BAD_AND}};
+                       {L"echo \"foo$(foo)bar\"", ERROR_BAD_VAR_SUBCOMMAND1}};
 
     parse_error_list_t errors;
     for (size_t i = 0; i < sizeof error_tests / sizeof *error_tests; i++) {
@@ -3768,23 +3891,29 @@ static void test_highlighting() {
     struct highlight_component_t {
         const wchar_t *txt;
         int color;
+        bool nospace;
+        highlight_component_t(const wchar_t *txt, int color, bool nospace = false)
+            : txt(txt), color(color), nospace(nospace) {}
     };
+    const bool ns = true;
 
-    const highlight_component_t components1[] = {
-        {L"echo", highlight_spec_command},
-        {L"test/fish_highlight_test/foo", highlight_spec_param | highlight_modifier_valid_path},
-        {L"&", highlight_spec_statement_terminator},
-        {NULL, -1}};
+    using highlight_component_list_t = std::vector<highlight_component_t>;
+    std::vector<highlight_component_list_t> highlight_tests;
 
-    const highlight_component_t components2[] = {
+    highlight_tests.push_back(
+        {{L"echo", highlight_spec_command},
+         {L"test/fish_highlight_test/foo", highlight_spec_param | highlight_modifier_valid_path},
+         {L"&", highlight_spec_statement_terminator}});
+
+    highlight_tests.push_back({
         {L"command", highlight_spec_command},
         {L"echo", highlight_spec_command},
         {L"abc", highlight_spec_param},
         {L"test/fish_highlight_test/foo", highlight_spec_param | highlight_modifier_valid_path},
         {L"&", highlight_spec_statement_terminator},
-        {NULL, -1}};
+    });
 
-    const highlight_component_t components3[] = {
+    highlight_tests.push_back({
         {L"if command ls", highlight_spec_command},
         {L"; ", highlight_spec_statement_terminator},
         {L"echo", highlight_spec_command},
@@ -3793,39 +3922,40 @@ static void test_highlighting() {
         {L"/bin/definitely_not_a_command", highlight_spec_error},
         {L"; ", highlight_spec_statement_terminator},
         {L"end", highlight_spec_command},
-        {NULL, -1}};
+    });
 
     // Verify that cd shows errors for non-directories.
-    const highlight_component_t components4[] = {
+    highlight_tests.push_back({
         {L"cd", highlight_spec_command},
         {L"test/fish_highlight_test", highlight_spec_param | highlight_modifier_valid_path},
-        {NULL, -1}};
+    });
 
-    const highlight_component_t components5[] = {
+    highlight_tests.push_back({
         {L"cd", highlight_spec_command},
         {L"test/fish_highlight_test/foo", highlight_spec_error},
-        {NULL, -1}};
+    });
 
-    const highlight_component_t components6[] = {
+    highlight_tests.push_back({
         {L"cd", highlight_spec_command},
         {L"--help", highlight_spec_param},
         {L"-h", highlight_spec_param},
         {L"definitely_not_a_directory", highlight_spec_error},
-        {NULL, -1}};
+    });
 
     // Command substitutions.
-    const highlight_component_t components7[] = {{L"echo", highlight_spec_command},
-                                                 {L"param1", highlight_spec_param},
-                                                 {L"(", highlight_spec_operator},
-                                                 {L"ls", highlight_spec_command},
-                                                 {L"param2", highlight_spec_param},
-                                                 {L")", highlight_spec_operator},
-                                                 {L"|", highlight_spec_statement_terminator},
-                                                 {L"cat", highlight_spec_command},
-                                                 {NULL, -1}};
+    highlight_tests.push_back({
+        {L"echo", highlight_spec_command},
+        {L"param1", highlight_spec_param},
+        {L"(", highlight_spec_operator},
+        {L"ls", highlight_spec_command},
+        {L"param2", highlight_spec_param},
+        {L")", highlight_spec_operator},
+        {L"|", highlight_spec_statement_terminator},
+        {L"cat", highlight_spec_command},
+    });
 
     // Redirections substitutions.
-    const highlight_component_t components8[] = {
+    highlight_tests.push_back({
         {L"echo", highlight_spec_command},
         {L"param1", highlight_spec_param},
 
@@ -3869,36 +3999,41 @@ static void test_highlighting() {
 
         // Just another param.
         {L"param2", highlight_spec_param},
-        {NULL, -1}};
+    });
 
-    const highlight_component_t components9[] = {{L"end", highlight_spec_error},
-                                                 {L";", highlight_spec_statement_terminator},
-                                                 {L"if", highlight_spec_command},
-                                                 {L"end", highlight_spec_error},
-                                                 {NULL, -1}};
+    highlight_tests.push_back({
+        {L"end", highlight_spec_error},
+        {L";", highlight_spec_statement_terminator},
+        {L"if", highlight_spec_command},
+        {L"end", highlight_spec_error},
+    });
 
-    const highlight_component_t components10[] = {
-        {L"echo", highlight_spec_command}, {L"'single_quote", highlight_spec_error}, {NULL, -1}};
+    highlight_tests.push_back({
+        {L"echo", highlight_spec_command},
+        {L"'single_quote", highlight_spec_error},
+    });
 
-    const highlight_component_t components11[] = {{L"echo", highlight_spec_command},
-                                                  {L"$foo", highlight_spec_operator},
-                                                  {L"\"", highlight_spec_quote},
-                                                  {L"$bar", highlight_spec_operator},
-                                                  {L"\"", highlight_spec_quote},
-                                                  {L"$baz[", highlight_spec_operator},
-                                                  {L"1 2..3", highlight_spec_param},
-                                                  {L"]", highlight_spec_operator},
-                                                  {NULL, -1}};
+    highlight_tests.push_back({
+        {L"echo", highlight_spec_command},
+        {L"$foo", highlight_spec_operator},
+        {L"\"", highlight_spec_quote},
+        {L"$bar", highlight_spec_operator},
+        {L"\"", highlight_spec_quote},
+        {L"$baz[", highlight_spec_operator},
+        {L"1 2..3", highlight_spec_param},
+        {L"]", highlight_spec_operator},
+    });
 
-    const highlight_component_t components12[] = {{L"for", highlight_spec_command},
-                                                  {L"i", highlight_spec_param},
-                                                  {L"in", highlight_spec_command},
-                                                  {L"1 2 3", highlight_spec_param},
-                                                  {L";", highlight_spec_statement_terminator},
-                                                  {L"end", highlight_spec_command},
-                                                  {NULL, -1}};
+    highlight_tests.push_back({
+        {L"for", highlight_spec_command},
+        {L"i", highlight_spec_param},
+        {L"in", highlight_spec_command},
+        {L"1 2 3", highlight_spec_param},
+        {L";", highlight_spec_statement_terminator},
+        {L"end", highlight_spec_command},
+    });
 
-    const highlight_component_t components13[] = {
+    highlight_tests.push_back({
         {L"echo", highlight_spec_command},
         {L"$$foo[", highlight_spec_operator},
         {L"1", highlight_spec_param},
@@ -3906,37 +4041,66 @@ static void test_highlighting() {
         {L"2", highlight_spec_param},
         {L"]", highlight_spec_operator},
         {L"[3]", highlight_spec_param},  // two dollar signs, so last one is not an expansion
-        {NULL, -1}};
+    });
 
-    const highlight_component_t components14[] = {{L"cat", highlight_spec_command},
-                                                  {L"/dev/null", highlight_spec_param},
-                                                  {L"|", highlight_spec_statement_terminator},
-                                                  {L"less", highlight_spec_command},
-                                                  {L"2>", highlight_spec_redirection},
-                                                  {NULL, -1}};
+    highlight_tests.push_back({
+        {L"cat", highlight_spec_command},
+        {L"/dev/null", highlight_spec_param},
+        {L"|", highlight_spec_statement_terminator},
+        {L"less", highlight_spec_command},
+        {L"2>", highlight_spec_redirection},
+    });
 
-    const highlight_component_t *tests[] = {components1,  components2,  components3,  components4,
-                                            components5,  components6,  components7,  components8,
-                                            components9,  components10, components11, components12,
-                                            components13, components14};
-    for (size_t which = 0; which < sizeof tests / sizeof *tests; which++) {
-        const highlight_component_t *components = tests[which];
-        // Count how many we have.
-        size_t component_count = 0;
-        while (components[component_count].txt != NULL) {
-            component_count++;
-        }
+    highlight_tests.push_back({
+        {L"if", highlight_spec_command},
+        {L"true", highlight_spec_command},
+        {L"&&", highlight_spec_operator},
+        {L"false", highlight_spec_command},
+        {L";", highlight_spec_statement_terminator},
+        {L"or", highlight_spec_operator},
+        {L"false", highlight_spec_command},
+        {L"||", highlight_spec_operator},
+        {L"true", highlight_spec_command},
+        {L";", highlight_spec_statement_terminator},
+        {L"and", highlight_spec_operator},
+        {L"not", highlight_spec_operator},
+        {L"!", highlight_spec_operator},
+        {L"true", highlight_spec_command},
+        {L";", highlight_spec_statement_terminator},
+        {L"end", highlight_spec_command},
+    });
 
+    // Verify variables and wildcards in commands using /bin/cat.
+    env_set(L"VARIABLE_IN_COMMAND", ENV_LOCAL, {L"a"});
+    env_set(L"VARIABLE_IN_COMMAND2", ENV_LOCAL, {L"at"});
+    highlight_tests.push_back(
+        {{L"/bin/ca", highlight_spec_command, ns}, {L"*", highlight_spec_operator, ns}});
+
+    highlight_tests.push_back({{L"/bin/c", highlight_spec_command, ns},
+                               {L"{$VARIABLE_IN_COMMAND}", highlight_spec_operator, ns},
+                               {L"*", highlight_spec_operator, ns}});
+
+    highlight_tests.push_back({{L"/bin/c", highlight_spec_command, ns},
+                               {L"{$VARIABLE_IN_COMMAND}", highlight_spec_operator, ns},
+                               {L"*", highlight_spec_operator, ns}});
+
+    highlight_tests.push_back({{L"/bin/c", highlight_spec_command, ns},
+                               {L"$VARIABLE_IN_COMMAND2", highlight_spec_operator, ns}});
+
+    highlight_tests.push_back({{L"$EMPTY_VARIABLE", highlight_spec_error}});
+    highlight_tests.push_back({{L"\"$EMPTY_VARIABLE\"", highlight_spec_error}});
+
+    for (const highlight_component_list_t &components : highlight_tests) {
         // Generate the text.
         wcstring text;
         std::vector<highlight_spec_t> expected_colors;
-        for (size_t i = 0; i < component_count; i++) {
-            if (i > 0) {
+        for (const highlight_component_t &comp : components) {
+            if (!text.empty() && !comp.nospace) {
                 text.push_back(L' ');
                 expected_colors.push_back(0);
             }
-            text.append(components[i].txt);
-            expected_colors.resize(text.size(), components[i].color);
+            text.append(comp.txt);
+            expected_colors.resize(text.size(), comp.color);
         }
         do_test(expected_colors.size() == text.size());
 
@@ -3954,11 +4118,14 @@ static void test_highlighting() {
 
             if (expected_colors.at(i) != colors.at(i)) {
                 const wcstring spaces(i, L' ');
-                err(L"Wrong color at index %lu in text (expected %#x, actual %#x):\n%ls\n%ls^", i,
-                    expected_colors.at(i), colors.at(i), text.c_str(), spaces.c_str());
+                err(L"Wrong color in test at index %lu in text (expected %#x, actual "
+                    L"%#x):\n%ls\n%ls^",
+                    i, expected_colors.at(i), colors.at(i), text.c_str(), spaces.c_str());
             }
         }
     }
+    env_remove(L"VARIABLE_IN_COMMAND", ENV_DEFAULT);
+    env_remove(L"VARIABLE_IN_COMMAND2", ENV_DEFAULT);
 }
 
 static void test_wcstring_tok() {
@@ -3989,7 +4156,7 @@ static void test_wcstring_tok() {
 }
 
 int builtin_string(parser_t &parser, io_streams_t &streams, wchar_t **argv);
-static void run_one_string_test(const wchar_t **argv, int expected_rc,
+static void run_one_string_test(const wchar_t *const *argv, int expected_rc,
                                 const wchar_t *expected_out) {
     parser_t parser;
     io_streams_t streams(0);
@@ -4003,15 +4170,15 @@ static void run_one_string_test(const wchar_t **argv, int expected_rc,
     if (rc != expected_rc) {
         err(L"Test failed on line %lu: [%ls]: expected return code %d but got %d", __LINE__,
             args.c_str(), expected_rc, rc);
-    } else if (streams.out.buffer() != expected_out) {
+    } else if (streams.out.contents() != expected_out) {
         err(L"Test failed on line %lu: [%ls]: expected [%ls] but got [%ls]", __LINE__, args.c_str(),
             escape_string(expected_out, ESCAPE_ALL).c_str(),
-            escape_string(streams.out.buffer(), ESCAPE_ALL).c_str());
+            escape_string(streams.out.contents(), ESCAPE_ALL).c_str());
     }
 }
 
 static void test_string() {
-    static struct string_test {
+    const struct string_test {
         const wchar_t *argv[15];
         int expected_rc;
         const wchar_t *expected_out;
@@ -4072,11 +4239,6 @@ static void test_string() {
         {{L"string", L"match", L"*a", L"a", 0}, STATUS_CMD_OK, L"a\n"},
         {{L"string", L"match", L"a*", L"a", 0}, STATUS_CMD_OK, L"a\n"},
         {{L"string", L"match", L"a*b*c", L"axxbyyc", 0}, STATUS_CMD_OK, L"axxbyyc\n"},
-        {{L"string", L"match", L"a*b?c", L"axxbyc", 0}, STATUS_CMD_OK, L"axxbyc\n"},
-        {{L"string", L"match", L"*?", L"a", 0}, STATUS_CMD_OK, L"a\n"},
-        {{L"string", L"match", L"*?", L"ab", 0}, STATUS_CMD_OK, L"ab\n"},
-        {{L"string", L"match", L"?*", L"a", 0}, STATUS_CMD_OK, L"a\n"},
-        {{L"string", L"match", L"?*", L"ab", 0}, STATUS_CMD_OK, L"ab\n"},
         {{L"string", L"match", L"\\*", L"*", 0}, STATUS_CMD_OK, L"*\n"},
         {{L"string", L"match", L"a*\\", L"abc\\", 0}, STATUS_CMD_OK, L"abc\\\n"},
         {{L"string", L"match", L"a*\\?", L"abc?", 0}, STATUS_CMD_OK, L"abc?\n"},
@@ -4298,15 +4460,36 @@ static void test_string() {
         {{L"string", L"trim", L"-c", L"\\/", L"/a\\"}, STATUS_CMD_OK, L"a\n"},
         {{L"string", L"trim", L"-c", L"\\/", L"a/"}, STATUS_CMD_OK, L"a\n"},
         {{L"string", L"trim", L"-c", L"\\/", L"\\a/"}, STATUS_CMD_OK, L"a\n"},
-        {{L"string", L"trim", L"-c", L"", L".a."}, STATUS_CMD_ERROR, L".a.\n"},
-
-        {{NULL}, STATUS_CMD_ERROR, NULL}};
-
-    struct string_test *t = string_tests;
-    while (t->argv[0]) {
-        run_one_string_test(t->argv, t->expected_rc, t->expected_out);
-        t++;
+        {{L"string", L"trim", L"-c", L"", L".a."}, STATUS_CMD_ERROR, L".a.\n"}};
+    for (const auto &t : string_tests) {
+        run_one_string_test(t.argv, t.expected_rc, t.expected_out);
     }
+
+    const auto saved_flags = fish_features();
+    const struct string_test qmark_noglob_tests[] = {
+        {{L"string", L"match", L"a*b?c", L"axxb?c", 0}, STATUS_CMD_OK, L"axxb?c\n"},
+        {{L"string", L"match", L"*?", L"a", 0}, STATUS_CMD_ERROR, L""},
+        {{L"string", L"match", L"*?", L"ab", 0}, STATUS_CMD_ERROR, L""},
+        {{L"string", L"match", L"?*", L"a", 0}, STATUS_CMD_ERROR, L""},
+        {{L"string", L"match", L"?*", L"ab", 0}, STATUS_CMD_ERROR, L""},
+        {{L"string", L"match", L"a*\\?", L"abc?", 0}, STATUS_CMD_ERROR, L""}};
+    mutable_fish_features().set(features_t::qmark_noglob, true);
+    for (const auto &t : qmark_noglob_tests) {
+        run_one_string_test(t.argv, t.expected_rc, t.expected_out);
+    }
+
+    const struct string_test qmark_glob_tests[] = {
+        {{L"string", L"match", L"a*b?c", L"axxbyc", 0}, STATUS_CMD_OK, L"axxbyc\n"},
+        {{L"string", L"match", L"*?", L"a", 0}, STATUS_CMD_OK, L"a\n"},
+        {{L"string", L"match", L"*?", L"ab", 0}, STATUS_CMD_OK, L"ab\n"},
+        {{L"string", L"match", L"?*", L"a", 0}, STATUS_CMD_OK, L"a\n"},
+        {{L"string", L"match", L"?*", L"ab", 0}, STATUS_CMD_OK, L"ab\n"},
+        {{L"string", L"match", L"a*\\?", L"abc?", 0}, STATUS_CMD_OK, L"abc?\n"}};
+    mutable_fish_features().set(features_t::qmark_noglob, false);
+    for (const auto &t : qmark_glob_tests) {
+        run_one_string_test(t.argv, t.expected_rc, t.expected_out);
+    }
+    mutable_fish_features() = saved_flags;
 }
 
 /// Helper for test_timezone_env_vars().
@@ -4363,24 +4546,24 @@ static void test_illegal_command_exit_code() {
     };
 
     const command_result_tuple_t tests[] = {
-        {L"echo -n", STATUS_CMD_OK}, {L"pwd", STATUS_CMD_OK},
-        {L")", STATUS_ILLEGAL_CMD},  {L") ", STATUS_ILLEGAL_CMD},
-        {L"*", STATUS_ILLEGAL_CMD},  {L"**", STATUS_ILLEGAL_CMD},
-        {L"%", STATUS_ILLEGAL_CMD},  {L"%test", STATUS_ILLEGAL_CMD},
-        {L"?", STATUS_ILLEGAL_CMD},  {L"abc?def", STATUS_ILLEGAL_CMD},
-        {L") ", STATUS_ILLEGAL_CMD}};
+        {L"echo -n", STATUS_CMD_OK},
+        {L"pwd", STATUS_CMD_OK},
+        {L"UNMATCHABLE_WILDCARD*", STATUS_UNMATCHED_WILDCARD},
+        {L"UNMATCHABLE_WILDCARD**", STATUS_UNMATCHED_WILDCARD},
+        {L"?", STATUS_UNMATCHED_WILDCARD},
+        {L"abc?def", STATUS_UNMATCHED_WILDCARD},
+    };
 
     int res = 0;
     const io_chain_t empty_ios;
     parser_t &parser = parser_t::principal_parser();
 
-    size_t i = 0;
-    for (i = 0; i < sizeof tests / sizeof *tests; i++) {
-        res = parser.eval(tests[i].txt, empty_ios, TOP);
+    for (const auto &test : tests) {
+        res = parser.eval(test.txt, empty_ios, TOP);
 
-        int exit_status = res ? STATUS_CMD_UNKNOWN : proc_get_last_status();
-        if (exit_status != tests[i].result) {
-            err(L"command '%ls': expected exit code %d , got %d", tests[i].txt, tests[i].result,
+        int exit_status = proc_get_last_status();
+        if (exit_status != test.result) {
+            err(L"command '%ls': expected exit code %d, got %d", test.txt, test.result,
                 exit_status);
         }
     }
@@ -4417,6 +4600,19 @@ void test_maybe() {
     do_test(m2.missing_or_empty());
     m2 = none();
     do_test(m2.missing_or_empty());
+
+    maybe_t<std::string> m0 = none();
+    maybe_t<std::string> m3("hi");
+    maybe_t<std::string> m4 = m3;
+    do_test(m4 && *m4 == "hi");
+    maybe_t<std::string> m5 = m0;
+    do_test(!m5);
+
+    maybe_t<std::string> acquire_test("def");
+    do_test(acquire_test);
+    std::string res = acquire_test.acquire();
+    do_test(!acquire_test);
+    do_test(res == "def");
 }
 
 void test_layout_cache() {
@@ -4531,6 +4727,7 @@ int main(int argc, char **argv) {
     if (should_test_function("cancellation")) test_cancellation();
     if (should_test_function("indents")) test_indents();
     if (should_test_function("utf8")) test_utf8();
+    if (should_test_function("feature_flags")) test_feature_flags();
     if (should_test_function("escape_sequences")) test_escape_sequences();
     if (should_test_function("lru")) test_lru();
     if (should_test_function("expand")) test_expand();

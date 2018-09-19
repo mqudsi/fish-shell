@@ -57,19 +57,21 @@ IF(BUILD_DOCS)
 
     # Build lexicon_filter.
     ADD_CUSTOM_COMMAND(OUTPUT lexicon_filter
-                       COMMAND build_tools/build_lexicon_filter.sh
+                       COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/build_lexicon_filter.sh
                                   ${CMAKE_CURRENT_SOURCE_DIR}/share/functions/
                                   ${CMAKE_CURRENT_SOURCE_DIR}/share/completions/
+                                  ${CMAKE_CURRENT_SOURCE_DIR}/lexicon_filter.in
                                   ${SED}
-                                  < ${CMAKE_CURRENT_SOURCE_DIR}/lexicon_filter.in
                                   > ${CMAKE_CURRENT_BINARY_DIR}/lexicon_filter
                                     && chmod a+x ${CMAKE_CURRENT_BINARY_DIR}/lexicon_filter
-                      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
                       DEPENDS ${FUNCTIONS_DIR_FILES} ${COMPLETIONS_DIR_FILES}
                               doc_src/commands.hdr ${CMAKE_CURRENT_SOURCE_DIR}/lexicon_filter.in
                               share/functions/__fish_config_interactive.fish
-                              build_tools/build_lexicon_filter.sh)
+                              build_tools/build_lexicon_filter.sh command_list_toc.txt)
 
+    # Other targets should depend on this target, otherwise the lexicon
+    # filter can be built twice.
     ADD_CUSTOM_TARGET(build_lexicon_filter DEPENDS lexicon_filter)
 
     #
@@ -77,9 +79,9 @@ IF(BUILD_DOCS)
     # builtins
     #
     FILE(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doc_src)
-    ADD_CUSTOM_COMMAND(OUTPUT doc_src/commands.hdr
-                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                       COMMAND build_tools/build_commands_hdr.sh ${HELP_SRC}
+    ADD_CUSTOM_COMMAND(OUTPUT doc_src/commands.hdr command_list_toc.txt
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                       COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/build_commands_hdr.sh ${HELP_SRC}
                                    < doc_src/commands.hdr.in
                                    > ${CMAKE_CURRENT_BINARY_DIR}/doc_src/commands.hdr
                        DEPENDS ${HELP_SRC}
@@ -103,7 +105,7 @@ IF(BUILD_DOCS)
                        COMMAND env `cat ${FBVF} | tr -d '\"'` ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/build_toc_txt.sh
                                doc_src/index.hdr.in ${HDR_FILES_NO_INDEX}
                                > ${CMAKE_CURRENT_BINARY_DIR}/toc.txt
-                       DEPENDS ${FBVF} ${HDR_FILES_NO_INDEX})
+                       DEPENDS ${CFBVF} ${HDR_FILES_NO_INDEX})
 
     # doc_src/index.hdr: toc.txt doc_src/index.hdr.in | show-AWK
     # @echo "  AWK CAT  $(em)$@$(sgr0)"
@@ -118,20 +120,31 @@ IF(BUILD_DOCS)
     #   @echo "  doxygen  $(em)user_doc$(sgr0)"
     #   $v (cat Doxyfile.user; echo INPUT_FILTER=./lexicon_filter; echo PROJECT_NUMBER=$(FISH_BUILD_VERSION) | $(SED) "s/-.*//") | doxygen - && touch user_doc
     #   $v rm -f $(wildcard $(addprefix ./user_doc/html/,arrow*.png bc_s.png bdwn.png closed.png doc.png folder*.png ftv2*.png nav*.png open.png splitbar.png sync_*.png tab*.* doxygen.* dynsections.js jquery.js pages.html))
-    ADD_CUSTOM_TARGET(doc
+    ADD_CUSTOM_TARGET(doc ALL
                       COMMAND env `cat ${FBVF}`
                               ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/build_user_doc.sh
                               ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.user ./lexicon_filter
-                      DEPENDS ${FBVF} Doxyfile.user ${DOC_SRC_FILES} doc.h ${HDR_FILES} lexicon_filter)
+                      DEPENDS ${CFBVF} Doxyfile.user ${DOC_SRC_FILES} doc.h ${HDR_FILES} build_lexicon_filter command_list_toc.txt)
 
     ADD_CUSTOM_COMMAND(OUTPUT share/man/
                        COMMAND env `cat ${FBVF} | tr -d '\"' `
                                INPUT_FILTER=lexicon_filter ${CMAKE_CURRENT_SOURCE_DIR}/build_tools/build_documentation.sh ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.help doc_src ./share
-                       DEPENDS ${FBVF} ${HELP_SRC} ${CMAKE_CURRENT_BINARY_DIR}/lexicon_filter)
+                       DEPENDS ${CFBVF} ${HELP_SRC} build_lexicon_filter)
 
     ADD_CUSTOM_TARGET(BUILD_MANUALS ALL DEPENDS share/man/)
 
     # Group docs targets into a DocsTargets folder
     SET_PROPERTY(TARGET doc BUILD_MANUALS build_lexicon_filter
                  PROPERTY FOLDER cmake/DocTargets)
+ELSEIF(HAVE_PREBUILT_DOCS)
+    IF(NOT CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
+        # Out of tree build - link the prebuilt documentation to the build tree
+        ADD_CUSTOM_TARGET(link_doc ALL)
+        ADD_CUSTOM_COMMAND(TARGET link_doc
+            COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/share/man ${CMAKE_CURRENT_BINARY_DIR}/share/man
+            POST_BUILD)
+        ADD_CUSTOM_COMMAND(TARGET link_doc
+            COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/user_doc ${CMAKE_CURRENT_BINARY_DIR}/user_doc
+            POST_BUILD)
+    ENDIF()
 ENDIF(BUILD_DOCS)

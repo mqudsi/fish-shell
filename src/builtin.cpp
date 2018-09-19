@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "builtin.h"
 #include "builtin_argparse.h"
@@ -74,14 +75,6 @@
 #include "reader.h"
 #include "wgetopt.h"
 #include "wutil.h"  // IWYU pragma: keep
-
-bool builtin_data_t::operator<(const wcstring &other) const {
-    return wcscmp(this->name, other.c_str()) < 0;
-}
-
-bool builtin_data_t::operator<(const builtin_data_t *other) const {
-    return wcscmp(this->name, other->name) < 0;
-}
 
 /// Counts the number of arguments in the specified null-terminated array
 int builtin_count_args(const wchar_t *const *argv) {
@@ -401,12 +394,10 @@ int builtin_false(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
 
 // END OF BUILTIN COMMANDS
 // Below are functions for handling the builtin commands.
-// THESE MUST BE SORTED BY NAME! Completion lookup uses binary search.
 
 // Data about all the builtin commands in fish.
 // Functions that are bound to builtin_generic are handled directly by the parser.
-// NOTE: These must be kept in sorted order!
-static const builtin_data_t builtin_datas[] = {
+static const std::unordered_set<builtin_data_t> builtin_datas = {
     {L"[", &builtin_test, N_(L"Test a condition")},
     {L"and", &builtin_generic, N_(L"Execute command if previous command suceeded")},
     {L"argparse", &builtin_argparse, N_(L"Parse options in fish script")},
@@ -415,8 +406,7 @@ static const builtin_data_t builtin_datas[] = {
     {L"bind", &builtin_bind, N_(L"Handle fish key bindings")},
     {L"block", &builtin_block, N_(L"Temporarily block delivery of events")},
     {L"break", &builtin_break_continue, N_(L"Stop the innermost loop")},
-    {L"breakpoint", &builtin_breakpoint,
-     N_(L"Temporarily halt execution of a script and launch an interactive debug prompt")},
+    {L"breakpoint", &builtin_breakpoint, N_(L"Temporarily halt execution of a script and launch an interactive debug prompt")},
     {L"builtin", &builtin_builtin, N_(L"Run a builtin command instead of a function")},
     {L"case", &builtin_generic, N_(L"Conditionally execute a block of commands")},
     {L"cd", &builtin_cd, N_(L"Change working directory")},
@@ -424,8 +414,7 @@ static const builtin_data_t builtin_datas[] = {
     {L"commandline", &builtin_commandline, N_(L"Set or get the commandline")},
     {L"complete", &builtin_complete, N_(L"Edit command specific completions")},
     {L"contains", &builtin_contains, N_(L"Search for a specified string in a list")},
-    {L"continue", &builtin_break_continue,
-     N_(L"Skip the rest of the current lap of the innermost loop")},
+    {L"continue", &builtin_break_continue, N_(L"Skip the rest of the current lap of the innermost loop")},
     {L"count", &builtin_count, N_(L"Count the number of arguments")},
     {L"disown", &builtin_disown, N_(L"Remove job from job list")},
     {L"echo", &builtin_echo, N_(L"Print arguments")},
@@ -463,8 +452,6 @@ static const builtin_data_t builtin_datas[] = {
     {L"wait", &builtin_wait, N_(L"Wait for background processes completed")},
     {L"while", &builtin_generic, N_(L"Perform a command multiple times")}};
 
-#define BUILTIN_COUNT (sizeof builtin_datas / sizeof *builtin_datas)
-
 /// Look up a builtin_data_t for a specified builtin
 ///
 /// @param  name
@@ -474,18 +461,19 @@ static const builtin_data_t builtin_datas[] = {
 ///    Pointer to a builtin_data_t
 ///
 static const builtin_data_t *builtin_lookup(const wcstring &name) {
-    const builtin_data_t *array_end = builtin_datas + BUILTIN_COUNT;
-    const builtin_data_t *found = std::lower_bound(builtin_datas, array_end, name);
-    if (found != array_end && name == found->name) {
-        return found;
+    auto search = builtin_data_t { name };
+    auto result = builtin_datas.find(search);
+    if (result == builtin_datas.end()) {
+        return NULL;
     }
-    return NULL;
+
+    return &*result;
 }
 
 /// Initialize builtin data.
 void builtin_init() {
-    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
-        intern_static(builtin_datas[i].name);
+    for (auto &bi : builtin_datas) {
+        intern_static(bi.name.c_str());
     }
 }
 
@@ -498,7 +486,7 @@ static const wcstring_list_t help_builtins({L"for", L"while", L"function", L"if"
 static bool cmd_needs_help(const wchar_t *cmd) { return contains(help_builtins, cmd); }
 
 /// Execute a builtin command
-int builtin_run(parser_t &parser, const wchar_t *const *argv, io_streams_t &streams) {
+int builtin_run(parser_t &parser, int job_pgid, wchar_t **argv, io_streams_t &streams) {
     UNUSED(parser);
     UNUSED(streams);
     if (argv == NULL || argv[0] == NULL) return STATUS_INVALID_ARGS;
@@ -511,15 +499,16 @@ int builtin_run(parser_t &parser, const wchar_t *const *argv, io_streams_t &stre
         return STATUS_CMD_OK;
     }
 
-    const builtin_data_t *data = builtin_lookup(argv[0]);
-    if (data) {
-        // Warning: layering violation and naughty cast. The code originally had a much more
-        // complicated solution to achieve exactly the same result: lie about the constness of argv.
-        // Some of the builtins we call do mutate the array via their calls to wgetopt() which could
-        // result in the pointers being reordered. This is harmless because we only get called once
-        // with a given argv array and nothing else will look at the contents of the array after we
-        // return.
-        return data->func(parser, streams, (wchar_t **)argv);
+    if (const builtin_data_t *data = builtin_lookup(argv[0])) {
+        // If we are interactive, save the foreground pgroup and restore it after in case the
+        // builtin needs to read from the terminal. See #4540.
+        bool grab_tty = is_interactive_session && isatty(streams.stdin_fd);
+        pid_t pgroup_to_restore = grab_tty ? terminal_acquire_before_builtin(job_pgid) : -1;
+        int ret = data->func(parser, streams, argv);
+        if (pgroup_to_restore >= 0) {
+            tcsetpgrp(STDIN_FILENO, pgroup_to_restore);
+        }
+        return ret;
     }
 
     debug(0, UNKNOWN_BUILTIN_ERR_MSG, argv[0]);
@@ -529,9 +518,9 @@ int builtin_run(parser_t &parser, const wchar_t *const *argv, io_streams_t &stre
 /// Returns a list of all builtin names.
 wcstring_list_t builtin_get_names() {
     wcstring_list_t result;
-    result.reserve(BUILTIN_COUNT);
-    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
-        result.push_back(builtin_datas[i].name);
+    result.reserve(builtin_datas.size());
+    for (auto &bi : builtin_datas) {
+        result.push_back(bi.name);
     }
     return result;
 }
@@ -539,9 +528,9 @@ wcstring_list_t builtin_get_names() {
 /// Insert all builtin names into list.
 void builtin_get_names(std::vector<completion_t> *list) {
     assert(list != NULL);
-    list->reserve(list->size() + BUILTIN_COUNT);
-    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
-        append_completion(list, builtin_datas[i].name);
+    list->reserve(list->size() + builtin_datas.size());
+    for (auto &bi : builtin_datas) {
+        append_completion(list, bi.name);
     }
 }
 
@@ -550,7 +539,7 @@ wcstring builtin_get_desc(const wcstring &name) {
     wcstring result;
     const builtin_data_t *builtin = builtin_lookup(name);
     if (builtin) {
-        result = _(builtin->desc);
+        result = _(builtin->desc.c_str());
     }
     return result;
 }

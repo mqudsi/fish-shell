@@ -55,30 +55,27 @@ static owning_lock<wcstring_list_t> &get_transient_stack() {
 }
 
 static bool get_top_transient(wcstring *out_result) {
-    auto &&locked = get_transient_stack().acquire();
-    wcstring_list_t &stack = locked.value;
-    if (stack.empty()) {
+    auto stack = get_transient_stack().acquire();
+    if (stack->empty()) {
         return false;
     }
-    out_result->assign(stack.back());
+    out_result->assign(stack->back());
     return true;
 }
 
 builtin_commandline_scoped_transient_t::builtin_commandline_scoped_transient_t(
     const wcstring &cmd) {
     ASSERT_IS_MAIN_THREAD();
-    auto &&locked = get_transient_stack().acquire();
-    wcstring_list_t &stack = locked.value;
-    stack.push_back(cmd);
-    this->token = stack.size();
+    auto stack = get_transient_stack().acquire();
+    stack->push_back(cmd);
+    this->token = stack->size();
 }
 
 builtin_commandline_scoped_transient_t::~builtin_commandline_scoped_transient_t() {
     ASSERT_IS_MAIN_THREAD();
-    auto &&locked = get_transient_stack().acquire();
-    wcstring_list_t &stack = locked.value;
-    assert(this->token == stack.size());
-    stack.pop_back();
+    auto stack = get_transient_stack().acquire();
+    assert(this->token == stack->size());
+    stack->pop_back();
 }
 
 /// Replace/append/insert the selection with/at/after the specified string.
@@ -213,10 +210,11 @@ int builtin_commandline(parser_t &parser, io_streams_t &streams, wchar_t **argv)
     static const struct woption long_options[] = {{L"append", no_argument, NULL, 'a'},
                                                   {L"insert", no_argument, NULL, 'i'},
                                                   {L"replace", no_argument, NULL, 'r'},
+                                                  {L"current-buffer", no_argument, NULL, 'b'},
                                                   {L"current-job", no_argument, NULL, 'j'},
                                                   {L"current-process", no_argument, NULL, 'p'},
+                                                  {L"current-selection", no_argument, NULL, 's'},
                                                   {L"current-token", no_argument, NULL, 't'},
-                                                  {L"current-buffer", no_argument, NULL, 'b'},
                                                   {L"cut-at-cursor", no_argument, NULL, 'c'},
                                                   {L"function", no_argument, NULL, 'f'},
                                                   {L"tokenize", no_argument, NULL, 'o'},
@@ -225,7 +223,6 @@ int builtin_commandline(parser_t &parser, io_streams_t &streams, wchar_t **argv)
                                                   {L"cursor", no_argument, NULL, 'C'},
                                                   {L"line", no_argument, NULL, 'L'},
                                                   {L"search-mode", no_argument, NULL, 'S'},
-                                                  {L"selection", no_argument, NULL, 's'},
                                                   {L"paging-mode", no_argument, NULL, 'P'},
                                                   {NULL, 0, NULL, 0}};
 
@@ -422,11 +419,11 @@ int builtin_commandline(parser_t &parser, io_streams_t &streams, wchar_t **argv)
     }
 
     if (search_mode) {
-        return !reader_search_mode();
+        return reader_is_in_search_mode() ? 0 : 1;
     }
 
     if (paging_mode) {
-        return !reader_has_pager_contents();
+        return reader_has_pager_contents() ? 0 : 1;
     }
 
     switch (buffer_part) {

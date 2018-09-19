@@ -107,7 +107,7 @@ tnode_t<g::plain_statement> parse_execution_context_t::infinite_recursive_statem
     const wcstring &forbidden_function_name = parser->forbidden_function.back();
 
     // Get the first job in the job list.
-    auto first_job = job_list.next_in_list<g::job>();
+    tnode_t<g::job> first_job = job_list.try_get_child<g::job_conjunction, 1>().child<0>();
     if (!first_job) {
         return {};
     }
@@ -215,7 +215,7 @@ bool parse_execution_context_t::job_is_simple_block(tnode_t<g::job> job_node) co
             return is_empty(statement.require_get_child<g::switch_statement, 0>().child<5>());
         case symbol_if_statement:
             return is_empty(statement.require_get_child<g::if_statement, 0>().child<3>());
-        case symbol_boolean_statement:
+        case symbol_not_statement:
         case symbol_decorated_statement:
             // not block statements
             return false;
@@ -226,10 +226,7 @@ bool parse_execution_context_t::job_is_simple_block(tnode_t<g::job> job_node) co
 }
 
 parse_execution_result_t parse_execution_context_t::run_if_statement(
-    tnode_t<g::if_statement> statement) {
-    // Push an if block.
-    if_block_t *ib = parser->push_block<if_block_t>();
-
+    tnode_t<g::if_statement> statement, const block_t *associated_block) {
     parse_execution_result_t result = parse_execution_success;
 
     // We have a sequence of if clauses, with a final else, resulting in a single job list that we
@@ -238,20 +235,20 @@ parse_execution_result_t parse_execution_context_t::run_if_statement(
     tnode_t<g::if_clause> if_clause = statement.child<0>();
     tnode_t<g::else_clause> else_clause = statement.child<1>();
     for (;;) {
-        if (should_cancel_execution(ib)) {
+        if (should_cancel_execution(associated_block)) {
             result = parse_execution_cancelled;
             break;
         }
 
         // An if condition has a job and a "tail" of andor jobs, e.g. "foo ; and bar; or baz".
-        tnode_t<g::job> condition_head = if_clause.child<1>();
+        tnode_t<g::job_conjunction> condition_head = if_clause.child<1>();
         tnode_t<g::andor_job_list> condition_boolean_tail = if_clause.child<3>();
 
         // Check the condition and the tail. We treat parse_execution_errored here as failure, in
         // accordance with historic behavior.
-        parse_execution_result_t cond_ret = run_1_job(condition_head, ib);
+        parse_execution_result_t cond_ret = run_job_conjunction(condition_head, associated_block);
         if (cond_ret == parse_execution_success) {
-            cond_ret = run_job_list(condition_boolean_tail, ib);
+            cond_ret = run_job_list(condition_boolean_tail, associated_block);
         }
         const bool take_branch =
             (cond_ret == parse_execution_success) && proc_get_last_status() == EXIT_SUCCESS;
@@ -284,19 +281,21 @@ parse_execution_result_t parse_execution_context_t::run_if_statement(
 
     // Execute any job list we got.
     if (job_list_to_execute) {
+        if_block_t *ib = parser->push_block<if_block_t>();
         run_job_list(job_list_to_execute, ib);
+        if (should_cancel_execution(ib)) {
+            result = parse_execution_cancelled;
+        }
+        parser->pop_block(ib);
     } else {
         // No job list means no sucessful conditions, so return 0 (issue #1443).
         proc_set_last_status(STATUS_CMD_OK);
     }
 
     // It's possible there's a last-minute cancellation (issue #1297).
-    if (should_cancel_execution(ib)) {
+    if (should_cancel_execution(associated_block)) {
         result = parse_execution_cancelled;
     }
-
-    // Done
-    parser->pop_block(ib);
 
     // Otherwise, take the exit status of the job list. Reversal of issue #1061.
     return result;
@@ -329,7 +328,7 @@ parse_execution_result_t parse_execution_context_t::run_function_statement(
     proc_set_last_status(err);
 
     if (!streams.err.empty()) {
-        this->report_error(header, L"%ls", streams.err.buffer().c_str());
+        this->report_error(header, L"%ls", streams.err.contents().c_str());
         result = parse_execution_errored;
     }
 
@@ -337,7 +336,7 @@ parse_execution_result_t parse_execution_context_t::run_function_statement(
 }
 
 parse_execution_result_t parse_execution_context_t::run_block_statement(
-    tnode_t<g::block_statement> statement) {
+    tnode_t<g::block_statement> statement, const block_t *associated_block) {
     tnode_t<g::block_header> bheader = statement.child<0>();
     tnode_t<g::job_list> contents = statement.child<1>();
 
@@ -345,7 +344,7 @@ parse_execution_result_t parse_execution_context_t::run_block_statement(
     if (auto header = bheader.try_get_child<g::for_header, 0>()) {
         ret = run_for_statement(header, contents);
     } else if (auto header = bheader.try_get_child<g::while_header, 0>()) {
-        ret = run_while_statement(header, contents);
+        ret = run_while_statement(header, contents, associated_block);
     } else if (auto header = bheader.try_get_child<g::function_header, 0>()) {
         ret = run_function_statement(header, contents);
     } else if (auto header = bheader.try_get_child<g::begin_header, 0>()) {
@@ -520,22 +519,21 @@ parse_execution_result_t parse_execution_context_t::run_switch_statement(
 }
 
 parse_execution_result_t parse_execution_context_t::run_while_statement(
-    tnode_t<grammar::while_header> header, tnode_t<grammar::job_list> contents) {
-    // Push a while block.
-    while_block_t *wb = parser->push_block<while_block_t>();
-
+    tnode_t<grammar::while_header> header, tnode_t<grammar::job_list> contents,
+    const block_t *associated_block) {
     parse_execution_result_t ret = parse_execution_success;
 
     // The conditions of the while loop.
-    tnode_t<g::job> condition_head = header.child<1>();
+    tnode_t<g::job_conjunction> condition_head = header.child<1>();
     tnode_t<g::andor_job_list> condition_boolean_tail = header.child<3>();
 
     // Run while the condition is true.
     for (;;) {
         // Check the condition.
-        parse_execution_result_t cond_ret = this->run_1_job(condition_head, wb);
+        parse_execution_result_t cond_ret =
+            this->run_job_conjunction(condition_head, associated_block);
         if (cond_ret == parse_execution_success) {
-            cond_ret = run_job_list(condition_boolean_tail, wb);
+            cond_ret = run_job_list(condition_boolean_tail, associated_block);
         }
 
         // We only continue on successful execution and EXIT_SUCCESS.
@@ -544,21 +542,23 @@ parse_execution_result_t parse_execution_context_t::run_while_statement(
         }
 
         // Check cancellation.
-        if (this->should_cancel_execution(wb)) {
+        if (this->should_cancel_execution(associated_block)) {
             ret = parse_execution_cancelled;
             break;
         }
 
-        // The block ought to go inside the loop (see issue #1212).
+        // Push a while block and then check its cancellation reason.
+        while_block_t *wb = parser->push_block<while_block_t>();
         this->run_job_list(contents, wb);
+        auto loop_status = wb->loop_status;
+        auto cancel_reason = this->cancellation_reason(wb);
+        parser->pop_block(wb);
 
-        if (this->cancellation_reason(wb) == execution_cancellation_loop_control) {
+        if (cancel_reason == execution_cancellation_loop_control) {
             // Handle break or continue.
-            if (wb->loop_status == LOOP_CONTINUE) {
-                // Reset the loop state.
-                wb->loop_status = LOOP_NORMAL;
+            if (loop_status == LOOP_CONTINUE) {
                 continue;
-            } else if (wb->loop_status == LOOP_BREAK) {
+            } else if (loop_status == LOOP_BREAK) {
                 break;
             }
         }
@@ -569,9 +569,6 @@ parse_execution_result_t parse_execution_context_t::run_while_statement(
             break;
         }
     }
-
-    // Done
-    parser->pop_block(wb);
     return ret;
 }
 
@@ -616,7 +613,7 @@ parse_execution_result_t parse_execution_context_t::report_errors(
 
 /// Reports an unmatched wildcard error and returns parse_execution_errored.
 parse_execution_result_t parse_execution_context_t::report_unmatched_wildcard_error(
-    const parse_node_t &unmatched_wildcard) {
+    const parse_node_t &unmatched_wildcard) const {
     proc_set_last_status(STATUS_UNMATCHED_WILDCARD);
     report_error(unmatched_wildcard, WILDCARD_ERR_MSG, get_source(unmatched_wildcard).c_str());
     return parse_execution_errored;
@@ -664,25 +661,15 @@ parse_execution_result_t parse_execution_context_t::handle_command_not_found(
         if (!args.empty()) {
             const wcstring argument = get_source(args.at(0));
 
-            wcstring ellipsis_str = wcstring(1, ellipsis_char);
-            if (ellipsis_str == L"$") ellipsis_str = L"...";
-
             // Looks like a command.
             this->report_error(statement, ERROR_BAD_EQUALS_IN_COMMAND5, argument.c_str(),
                                name_str.c_str(), val_str.c_str(), argument.c_str(),
-                               ellipsis_str.c_str());
+                               ellipsis_str);
         } else {
             wcstring assigned_val = reconstruct_orig_str(val_str);
             this->report_error(statement, ERROR_BAD_COMMAND_ASSIGN_ERR_MSG, name_str.c_str(),
                                assigned_val.c_str());
         }
-    } else if (wcschr(cmd, L'$') || wcschr(cmd, VARIABLE_EXPAND_SINGLE) ||
-               wcschr(cmd, VARIABLE_EXPAND)) {
-        const wchar_t *msg =
-            _(L"Variables may not be used as commands. In fish, "
-              L"please define a function or use 'eval %ls'.");
-        wcstring eval_cmd = reconstruct_orig_str(cmd_str);
-        this->report_error(statement, msg, eval_cmd.c_str());
     } else if (err_code != ENOENT) {
         this->report_error(statement, _(L"The file '%ls' is not executable by this user"), cmd);
     } else {
@@ -713,6 +700,36 @@ parse_execution_result_t parse_execution_context_t::handle_command_not_found(
     return parse_execution_errored;
 }
 
+parse_execution_result_t parse_execution_context_t::expand_command(
+    tnode_t<grammar::plain_statement> statement, wcstring *out_cmd,
+    wcstring_list_t *out_args) const {
+    // Here we're expanding a command, for example $HOME/bin/stuff or $randomthing. The first
+    // completion becomes the command itself, everything after becomes arguments. Command
+    // substitutions are not supported.
+    parse_error_list_t errors;
+
+    // Get the unexpanded command string. We expect to always get it here.
+    wcstring unexp_cmd = *command_for_plain_statement(statement, pstree->src);
+    wcstring cmd;
+    wcstring_list_t args;
+
+    // Expand the string to produce completions, and report errors.
+    expand_error_t expand_err = expand_to_command_and_args(unexp_cmd, out_cmd, out_args, &errors);
+    if (expand_err == EXPAND_ERROR) {
+        proc_set_last_status(STATUS_ILLEGAL_CMD);
+        return report_errors(errors);
+    } else if (expand_err == EXPAND_WILDCARD_NO_MATCH) {
+        return report_unmatched_wildcard_error(statement);
+    }
+    assert(expand_err == EXPAND_OK || expand_err == EXPAND_WILDCARD_MATCH);
+
+    // Complain if the resulting expansion was empty, or expanded to an empty string.
+    if (out_cmd->empty()) {
+        return this->report_error(statement, _(L"The expanded command was empty."));
+    }
+    return parse_execution_success;
+}
+
 /// Creates a 'normal' (non-block) process.
 parse_execution_result_t parse_execution_context_t::populate_plain_process(
     job_t *job, process_t *proc, tnode_t<grammar::plain_statement> statement) {
@@ -722,16 +739,14 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(
     // We may decide that a command should be an implicit cd.
     bool use_implicit_cd = false;
 
-    // Get the command. We expect to always get it here.
-    wcstring cmd = *command_for_plain_statement(statement, pstree->src);
-
-    // Expand it as a command. Return an error on failure.
-    bool expanded = expand_one(cmd, EXPAND_SKIP_CMDSUBST | EXPAND_SKIP_VARIABLES, NULL);
-    if (!expanded) {
-        report_error(statement, ILLEGAL_CMD_ERR_MSG, cmd.c_str());
-        proc_set_last_status(STATUS_ILLEGAL_CMD);
-        return parse_execution_errored;
+    // Get the command and any arguments due to expanding the command.
+    wcstring cmd;
+    wcstring_list_t args_from_cmd_expansion;
+    auto ret = expand_command(statement, &cmd, &args_from_cmd_expansion);
+    if (ret != parse_execution_success) {
+        return ret;
     }
+    assert(!cmd.empty() && "expand_command should not produce an empty command");
 
     // Determine the process type.
     enum process_type_t process_type = process_type_for_command(statement, cmd);
@@ -741,6 +756,32 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(
         parser->forbidden_function.size() > FISH_MAX_STACK_DEPTH) {
         this->report_error(statement, CALL_STACK_LIMIT_EXCEEDED_ERR_MSG);
         return parse_execution_errored;
+    }
+
+    // Protect against exec with background processes running
+    static uint32_t last_exec_run_counter =  -1;
+    if (process_type == INTERNAL_EXEC) {
+        job_iterator_t jobs;
+        bool have_bg = false;
+        const job_t *bg = nullptr;
+        while ((bg = jobs.next())) {
+            if (!job_is_completed(bg)) {
+                have_bg = true;
+                break;
+            }
+        }
+
+        if (have_bg) {
+            /* debug(1, "Background jobs remain! run_counter: %u, last_exec_run_count: %u", reader_run_count(), last_exec_run_counter); */
+            if (isatty(STDIN_FILENO) && reader_run_count() - 1 != last_exec_run_counter) {
+                reader_bg_job_warning();
+                last_exec_run_counter = reader_run_count();
+                return parse_execution_errored;
+            }
+            else {
+                kill_background_jobs();
+            }
+        }
     }
 
     wcstring path_to_external_command;
@@ -756,9 +797,9 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(
         if (!has_command && get_decoration(statement) == parse_statement_decoration_none) {
             // Implicit cd requires an empty argument and redirection list.
             tnode_t<g::arguments_or_redirections_list> args = statement.child<1>();
-            if (!args.try_get_child<g::argument, 0>() && !args.try_get_child<g::redirection, 0>()) {
-                // Ok, no arguments or redirections; check to see if the first argument is a
-                // directory.
+            if (args_from_cmd_expansion.empty() && !args.try_get_child<g::argument, 0>() &&
+                !args.try_get_child<g::redirection, 0>()) {
+                // Ok, no arguments or redirections; check to see if the command is a directory.
                 wcstring implicit_cd_path;
                 use_implicit_cd = path_can_be_implicit_cd(cmd, &implicit_cd_path);
             }
@@ -770,27 +811,31 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(
         }
     }
 
-    // The argument list and set of IO redirections that we will construct for the process.
+    // Produce the full argument list and the set of IO redirections.
+    wcstring_list_t cmd_args;
     io_chain_t process_io_chain;
-    wcstring_list_t argument_list;
     if (use_implicit_cd) {
-        /* Implicit cd is simple */
-        argument_list.push_back(L"cd");
-        argument_list.push_back(cmd);
+        // Implicit cd is simple.
+        cmd_args = {L"cd", cmd};
         path_to_external_command.clear();
 
         // If we have defined a wrapper around cd, use it, otherwise use the cd builtin.
         process_type = function_exists(L"cd") ? INTERNAL_FUNCTION : INTERNAL_BUILTIN;
     } else {
+        // Not implicit cd.
         const globspec_t glob_behavior = (cmd == L"set" || cmd == L"count") ? nullglob : failglob;
-        // Form the list of arguments. The command is the first argument.
+        // Form the list of arguments. The command is the first argument, followed by any arguments
+        // from expanding the command, followed by the argument nodes themselves. E.g. if the
+        // command is '$gco foo' and $gco is git checkout.
+        cmd_args.push_back(cmd);
+        cmd_args.insert(cmd_args.end(), args_from_cmd_expansion.begin(),
+                        args_from_cmd_expansion.end());
         argument_node_list_t arg_nodes = statement.descendants<g::argument>();
         parse_execution_result_t arg_result =
-            this->expand_arguments_from_nodes(arg_nodes, &argument_list, glob_behavior);
+            this->expand_arguments_from_nodes(arg_nodes, &cmd_args, glob_behavior);
         if (arg_result != parse_execution_success) {
             return arg_result;
         }
-        argument_list.insert(argument_list.begin(), cmd);
 
         // The set of IO redirections that we construct for the process.
         if (!this->determine_io_chain(statement.child<1>(), &process_io_chain)) {
@@ -803,7 +848,7 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(
 
     // Populate the process.
     proc->type = process_type;
-    proc->set_argv(argument_list);
+    proc->set_argv(cmd_args);
     proc->set_io_chain(process_io_chain);
     proc->actual_cmd = path_to_external_command;
     return parse_execution_success;
@@ -921,33 +966,11 @@ bool parse_execution_context_t::determine_io_chain(tnode_t<g::arguments_or_redir
     return !errored;
 }
 
-parse_execution_result_t parse_execution_context_t::populate_boolean_process(
-    job_t *job, process_t *proc, tnode_t<g::boolean_statement> bool_statement) {
-    // Handle a boolean statement.
-    bool skip_job = false;
-    switch (bool_statement_type(bool_statement)) {
-        case parse_bool_and: {
-            // AND. Skip if the last job failed.
-            skip_job = (proc_get_last_status() != 0);
-            break;
-        }
-        case parse_bool_or: {
-            // OR. Skip if the last job succeeded.
-            skip_job = (proc_get_last_status() == 0);
-            break;
-        }
-        case parse_bool_not: {
-            // NOT. Negate it.
-            job->set_flag(JOB_NEGATE, !job->get_flag(JOB_NEGATE));
-            break;
-        }
-    }
-
-    if (skip_job) {
-        return parse_execution_skipped;
-    }
+parse_execution_result_t parse_execution_context_t::populate_not_process(
+    job_t *job, process_t *proc, tnode_t<g::not_statement> not_statement) {
+    job->set_flag(JOB_NEGATE, !job->get_flag(JOB_NEGATE));
     return this->populate_job_process(job, proc,
-                                      bool_statement.require_get_child<g::statement, 1>());
+                                      not_statement.require_get_child<g::statement, 1>());
 }
 
 template <typename Type>
@@ -985,8 +1008,8 @@ parse_execution_result_t parse_execution_context_t::populate_job_process(
     parse_execution_result_t result = parse_execution_success;
 
     switch (specific_statement.type) {
-        case symbol_boolean_statement: {
-            result = this->populate_boolean_process(job, proc, {&tree(), &specific_statement});
+        case symbol_not_statement: {
+            result = this->populate_not_process(job, proc, {&tree(), &specific_statement});
             break;
         }
         case symbol_block_statement:
@@ -1117,11 +1140,12 @@ parse_execution_result_t parse_execution_context_t::run_1_job(tnode_t<g::job> jo
         assert(specific_statement_type_is_redirectable_block(specific_statement));
         switch (specific_statement.type) {
             case symbol_block_statement: {
-                result = this->run_block_statement({&tree(), &specific_statement});
+                result =
+                    this->run_block_statement({&tree(), &specific_statement}, associated_block);
                 break;
             }
             case symbol_if_statement: {
-                result = this->run_if_statement({&tree(), &specific_statement});
+                result = this->run_if_statement({&tree(), &specific_statement}, associated_block);
                 break;
             }
             case symbol_switch_statement: {
@@ -1220,19 +1244,64 @@ parse_execution_result_t parse_execution_context_t::run_1_job(tnode_t<g::job> jo
     return parse_execution_success;
 }
 
+parse_execution_result_t parse_execution_context_t::run_job_conjunction(
+    tnode_t<grammar::job_conjunction> job_expr, const block_t *associated_block) {
+    parse_execution_result_t result = parse_execution_success;
+    tnode_t<g::job_conjunction> cursor = job_expr;
+    // continuation is the parent of the cursor
+    tnode_t<g::job_conjunction_continuation> continuation;
+    while (cursor) {
+        if (should_cancel_execution(associated_block)) break;
+        bool skip = false;
+        if (continuation) {
+            // Check the conjunction type.
+            parse_bool_statement_type_t conj = bool_statement_type(continuation);
+            assert((conj == parse_bool_and || conj == parse_bool_or) && "Unexpected conjunction");
+            skip = should_skip(conj);
+        }
+        if (! skip) {
+            result = run_1_job(cursor.child<0>(), associated_block);
+        }
+        continuation = cursor.child<1>();
+        cursor = continuation.try_get_child<g::job_conjunction, 2>();
+    }
+    return result;
+}
+
+bool parse_execution_context_t::should_skip(parse_bool_statement_type_t type) const {
+    switch (type) {
+        case parse_bool_and:
+            // AND. Skip if the last job failed.
+            return proc_get_last_status() != 0;
+        case parse_bool_or:
+            // OR. Skip if the last job succeeded.
+            return proc_get_last_status() == 0;
+        default:
+            return false;
+    }
+}
+
 template <typename Type>
 parse_execution_result_t parse_execution_context_t::run_job_list(tnode_t<Type> job_list,
                                                                  const block_t *associated_block) {
+    // We handle both job_list and andor_job_list uniformly.
     static_assert(Type::token == symbol_job_list || Type::token == symbol_andor_job_list,
                   "Not a job list");
 
     parse_execution_result_t result = parse_execution_success;
-    while (tnode_t<g::job> job = job_list.template next_in_list<g::job>()) {
+    while (auto job_conj = job_list.template next_in_list<g::job_conjunction>()) {
         if (should_cancel_execution(associated_block)) break;
-        result = this->run_1_job(job, associated_block);
+
+        // Maybe skip the job if it has a leading and/or.
+        // Skipping is treated as success.
+        if (should_skip(get_decorator(job_conj))) {
+            result = parse_execution_success;
+        } else {
+            result = this->run_job_conjunction(job_conj, associated_block);
+        }
     }
 
-    // Returns the last job executed.
+    // Returns the result of the last job executed or skipped.
     return result;
 }
 
@@ -1245,9 +1314,9 @@ parse_execution_result_t parse_execution_context_t::eval_node(tnode_t<g::stateme
     scoped_push<io_chain_t> block_io_push(&block_io, io);
     enum parse_execution_result_t status = parse_execution_success;
     if (auto block = statement.try_get_child<g::block_statement, 0>()) {
-        status = this->run_block_statement(block);
+        status = this->run_block_statement(block, associated_block);
     } else if (auto ifstat = statement.try_get_child<g::if_statement, 0>()) {
-        status = this->run_if_statement(ifstat);
+        status = this->run_if_statement(ifstat, associated_block);
     } else if (auto switchstat = statement.try_get_child<g::switch_statement, 0>()) {
         status = this->run_switch_statement(switchstat);
     } else {

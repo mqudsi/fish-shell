@@ -17,6 +17,7 @@
 #include <sys/ioctl.h>  // IWYU pragma: keep
 #endif
 
+#include <algorithm>
 #if HAVE_CURSES_H
 #include <curses.h>
 #elif HAVE_NCURSES_H
@@ -24,17 +25,13 @@
 #elif HAVE_NCURSES_CURSES_H
 #include <ncurses/curses.h>
 #endif
-// #if HAVE_TERM_H
-// #include <term.h>
-// #elif HAVE_NCURSES_TERM_H
-// #include <ncurses/term.h>
-// #endif
-
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <tuple>
 #include <vector>
 
 #include "fallback.h"  // IWYU pragma: keep
@@ -196,6 +193,8 @@ extern struct termios shell_modes;
 /// The character to use where the text has been truncated. Is an ellipsis on unicode system and a $
 /// on other systems.
 extern wchar_t ellipsis_char;
+/// The character or string to use where text has been truncated (ellipsis if possible, otherwise ...)
+extern const wchar_t *ellipsis_str;
 
 /// Character representing an omitted newline at the end of text.
 extern wchar_t omitted_newline_char;
@@ -215,6 +214,14 @@ extern const wchar_t *program_name;
 /// Set to false at run-time if it's been determined we can't trust the last modified timestamp on
 /// the tty.
 extern bool has_working_tty_timestamps;
+
+/// A list of all whitespace characters
+extern const wcstring whitespace;
+extern const char *whitespace_narrow;
+
+bool is_whitespace(const wchar_t input);
+bool is_whitespace(const wcstring &input);
+inline bool is_whitespace(const wchar_t *input) { return is_whitespace(wcstring(input)); }
 
 /// This macro is used to check that an argument is true. It is a bit like a non-fatal form of
 /// assert. Instead of exiting on failure, the current function is ended at once. The second
@@ -284,8 +291,11 @@ extern bool has_working_tty_timestamps;
 /// See https://developer.gnome.org/glib/stable/glib-I18N.html#N-:CAPS
 #define N_(wstr) wstr
 
-/// Test if a list of stirngs contains a particular string.
-bool contains(const wcstring_list_t &list, const wcstring &str);
+/// Test if a vector contains a value.
+template <typename T1, typename T2>
+bool contains(const std::vector<T1> &vec, const T2 &val) {
+    return std::find(vec.begin(), vec.end(), val) != vec.end();
+}
 
 /// Print a stack trace to stderr.
 void show_stackframe(const wchar_t msg_level, int frame_count = 100, int skip_levels = 0);
@@ -324,10 +334,17 @@ bool string_prefixes_string(const wchar_t *proposed_prefix, const wchar_t *value
 /// Test if a string is a suffix of another.
 bool string_suffixes_string(const wcstring &proposed_suffix, const wcstring &value);
 bool string_suffixes_string(const wchar_t *proposed_suffix, const wcstring &value);
+bool string_suffixes_string_case_insensitive(const wcstring &proposed_suffix, const wcstring &value);
 
 /// Test if a string prefixes another without regard to case. Returns true if a is a prefix of b.
 bool string_prefixes_string_case_insensitive(const wcstring &proposed_prefix,
                                              const wcstring &value);
+
+/// Split a string by a separator character.
+wcstring_list_t split_string(const wcstring &val, wchar_t sep);
+
+/// Join a list of strings by a separator character.
+wcstring join_strings(const wcstring_list_t &vals, wchar_t sep);
 
 enum fuzzy_match_type_t {
     // We match the string exactly: FOOBAR matches FOOBAR.
@@ -517,7 +534,7 @@ char **make_null_terminated_array(const std::vector<std::string> &lst);
 // Helper class for managing a null-terminated array of null-terminated strings (of some char type).
 template <typename CharType_t>
 class null_terminated_array_t {
-    CharType_t **array;
+    CharType_t **array{NULL};
 
     // No assignment or copying.
     void operator=(null_terminated_array_t rhs);
@@ -541,11 +558,22 @@ class null_terminated_array_t {
     }
 
    public:
-    null_terminated_array_t() : array(NULL) {}
+    null_terminated_array_t() = default;
+
     explicit null_terminated_array_t(const string_list_t &argv)
         : array(make_null_terminated_array(argv)) {}
 
     ~null_terminated_array_t() { this->free(); }
+
+    null_terminated_array_t(null_terminated_array_t &&rhs) : array(rhs.array) {
+        rhs.array = nullptr;
+    }
+
+    null_terminated_array_t operator=(null_terminated_array_t &&rhs) {
+        free();
+        array = rhs.array;
+        rhs.array = nullptr;
+    }
 
     void set(const string_list_t &argv) {
         this->free();
@@ -553,6 +581,7 @@ class null_terminated_array_t {
     }
 
     const CharType_t *const *get() const { return array; }
+    CharType_t **get() { return array; }
 
     void clear() { this->free(); }
 };
@@ -576,20 +605,25 @@ typedef std::lock_guard<std::recursive_mutex> scoped_rlock;
 //
 template <typename DATA>
 class acquired_lock {
-    scoped_lock lock;
-    acquired_lock(fish_mutex_t &lk, DATA *v) : lock(lk), value(*v) {}
+    std::unique_lock<fish_mutex_t> lock;
+    acquired_lock(fish_mutex_t &lk, DATA *v) : lock(lk), value(v) {}
 
     template <typename T>
     friend class owning_lock;
 
+    DATA *value;
+
    public:
-    // No copying, move only
+    // No copying, move construction only
     acquired_lock &operator=(const acquired_lock &) = delete;
     acquired_lock(const acquired_lock &) = delete;
     acquired_lock(acquired_lock &&) = default;
     acquired_lock &operator=(acquired_lock &&) = default;
 
-    DATA &value;
+    DATA *operator->() { return value; }
+    const DATA *operator->() const { return value; }
+    DATA &operator*() { return *value; }
+    const DATA &operator*() const { return *value; }
 };
 
 // A lock that owns a piece of data
@@ -638,6 +672,44 @@ class scoped_push {
             restored = true;
         }
     }
+};
+
+/// A helper class for managing and automatically closing a file descriptor.
+class autoclose_fd_t {
+    int fd_;
+
+   public:
+    // Closes the fd if not already closed.
+    void close();
+
+    // Returns the fd.
+    int fd() const { return fd_; }
+
+    // Returns the fd, transferring ownership to the caller.
+    int acquire() {
+        int temp = fd_;
+        fd_ = -1;
+        return temp;
+    }
+
+    // Resets to a new fd, taking ownership.
+    void reset(int fd) {
+        if (fd == fd_) return;
+        close();
+        fd_ = fd;
+    }
+
+    autoclose_fd_t(const autoclose_fd_t &) = delete;
+    void operator=(const autoclose_fd_t &) = delete;
+    autoclose_fd_t(autoclose_fd_t &&rhs) : fd_(rhs.fd_) { rhs.fd_ = -1; }
+
+    void operator=(autoclose_fd_t &&rhs) {
+        close();
+        std::swap(this->fd_, rhs.fd_);
+    }
+
+    explicit autoclose_fd_t(int fd = -1) : fd_(fd) {}
+    ~autoclose_fd_t() { close(); }
 };
 
 /// Appends a path component, with a / if necessary.
@@ -695,6 +767,11 @@ wcstring escape_string(const wchar_t *in, escape_flags_t flags,
                        escape_string_style_t style = STRING_STYLE_SCRIPT);
 wcstring escape_string(const wcstring &in, escape_flags_t flags,
                        escape_string_style_t style = STRING_STYLE_SCRIPT);
+
+/// \return a string representation suitable for debugging (not for presenting to the user). This
+/// replaces non-ASCII characters with either tokens like <BRACE_SEP> or <\xfdd7>. No other escapes
+/// are made (i.e. this is a lossy escape).
+wcstring debug_escape(const wcstring &in);
 
 /// Expand backslashed escapes and substitute them with their unescaped counterparts. Also
 /// optionally change the wildcards, the tilde character and a few more into constants which are
@@ -770,8 +847,16 @@ void assert_is_not_forked_child(const char *who);
 #define ASSERT_IS_NOT_FORKED_CHILD_TRAMPOLINE(x) assert_is_not_forked_child(x)
 #define ASSERT_IS_NOT_FORKED_CHILD() ASSERT_IS_NOT_FORKED_CHILD_TRAMPOLINE(__FUNCTION__)
 
-/// Return whether we are running in Windows Subsystem for Linux.
-bool is_windows_subsystem_for_linux();
+/// Detect if we are Windows Subsystem for Linux by inspecting /proc/sys/kernel/osrelease
+/// and checking if "Microsoft" is in the first line.
+/// See https://github.com/Microsoft/WSL/issues/423 and Microsoft/WSL#2997
+constexpr bool is_windows_subsystem_for_linux() {
+#ifdef WSL
+    return true;
+#else
+    return false;
+#endif
+}
 
 extern "C" {
 __attribute__((noinline)) void debug_thread_error(void);
@@ -802,6 +887,19 @@ struct enum_map {
     T val;
     const wchar_t *const str;
 };
+
+
+/// Use for scoped enums (i.e. `enum class`) with bitwise operations
+#define ENUM_FLAG_OPERATOR(T,X,Y) \
+inline T operator X (T lhs, T rhs) { return (T) (static_cast<std::underlying_type<T>::type>(lhs) X static_cast<std::underlying_type<T>::type>(rhs)); } \
+inline T operator Y (T &lhs, T rhs) { return lhs = (T) (static_cast<std::underlying_type<T>::type>(lhs) X static_cast<std::underlying_type<T>::type>(rhs)); }
+#define ENUM_FLAGS(T) \
+enum class T; \
+inline T operator ~ (T t) { return (T) (~static_cast<std::underlying_type<T>::type>(t)); } \
+ENUM_FLAG_OPERATOR(T,|,|=) \
+ENUM_FLAG_OPERATOR(T,^,^=) \
+ENUM_FLAG_OPERATOR(T,&,&=) \
+enum class T
 
 /// Given a string return the matching enum. Return the sentinal enum if no match is made. The map
 /// must be sorted by the `str` member. A binary search is twice as fast as a linear search with 16
@@ -835,6 +933,22 @@ static const wchar_t *enum_to_str(T enum_val, const enum_map<T> map[]) {
     }
     return NULL;
 };
+
+template<typename... Args>
+using tuple_list = std::vector<std::tuple<Args...>>;
+
+//Given a container mapping one X to many Y, return a list of {X,Y}
+template<typename X, typename Y>
+inline tuple_list<X, Y> flatten(const std::unordered_map<X, std::vector<Y>> &list) {
+    tuple_list<X, Y> results(list.size() * 1.5); //just a guess as to the initial size
+    for (auto &kv : list) {
+        for (auto &v : kv.second) {
+            results.emplace_back(std::make_tuple(kv.first, v));
+        }
+    }
+
+    return results;
+}
 
 void redirect_tty_output();
 

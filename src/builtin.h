@@ -16,15 +16,25 @@ struct io_streams_t;
 /// Data structure to describe a builtin.
 struct builtin_data_t {
     // Name of the builtin.
-    const wchar_t *name;
-    // Function pointer tothe builtin implementation.
+    const wcstring name;
+    // Function pointer to the builtin implementation.
     int (*func)(parser_t &parser, io_streams_t &streams, wchar_t **argv);
     // Description of what the builtin does.
-    const wchar_t *desc;
+    const wcstring desc;
 
-    bool operator<(const wcstring &) const;
-    bool operator<(const builtin_data_t *) const;
+    bool operator == (const builtin_data_t &other) const {
+        return name == other.name;
+    }
 };
+
+namespace std {
+    template<>
+    struct hash<builtin_data_t> {
+        std::size_t operator()(const builtin_data_t &data) const {
+            return std::hash<wcstring>()(data.name);
+        }
+    };
+}
 
 /// The default prompt for the read command.
 #define DEFAULT_READ_PROMPT L"set_color green; echo -n read; set_color normal; echo -n \"> \""
@@ -78,7 +88,7 @@ enum { COMMAND_NOT_BUILTIN, BUILTIN_REGULAR, BUILTIN_FUNCTION };
 void builtin_init();
 bool builtin_exists(const wcstring &cmd);
 
-int builtin_run(parser_t &parser, const wchar_t *const *argv, io_streams_t &streams);
+int builtin_run(parser_t &parser, int job_pgrp, wchar_t **argv, io_streams_t &streams);
 
 wcstring_list_t builtin_get_names();
 void builtin_get_names(std::vector<completion_t> *list);
