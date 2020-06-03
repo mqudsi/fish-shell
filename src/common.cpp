@@ -570,12 +570,26 @@ void fish_setlocale() {
 long read_blocked(int fd, void *buf, size_t count) {
     long bytes_read = 0;
 
+    // As read_blocked is in the critical path, this is only instantiated if we think we need to
+    // check for a SIGTTIN.
+    std::unique_ptr<sigchecker_t> sigttin;
     while (count) {
         ssize_t res = read(fd, static_cast<char *>(buf) + bytes_read, count);
         if (res == 0) {
             break;
         } else if (res == -1) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) {
+                // When the our process group is orphaned and we no longer have control of the
+                // terminal, we can get stuck in an infinite SIGTTIN/EINTR loop. See #7060.
+                if (!sigttin) {
+                    sigttin = make_unique<sigchecker_t>(topic_t::sigttin);
+                    continue;
+                }
+                if (sigttin->check()) {
+                    return -1;
+                }
+                continue;
+            }
             if (errno == EAGAIN) return bytes_read ? bytes_read : -1;
             return -1;
         } else {

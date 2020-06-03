@@ -37,6 +37,7 @@ enum class topic_t : uint8_t {
     sigchld,        // Corresponds to SIGCHLD signal.
     sighupint,      // Corresponds to both SIGHUP and SIGINT signals.
     internal_exit,  // Corresponds to an internal process exit.
+    sigttin,        // Corresponds to SIGTTIN signal.
     COUNT
 };
 
