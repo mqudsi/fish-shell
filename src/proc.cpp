@@ -925,6 +925,17 @@ static bool terminal_return_from_job(job_t *j, int restore_attrs) {
     }
 
     FLOG(proc_pgroup, "fish reclaiming terminal after job pgid", *pgid);
+
+    // If the child spawned us grandchildren, we can end up receiving SIGTTIN even after taking
+    // control of the shell for ourselves with tcsetpgrp because the grandchild is free to steal
+    // the tty back for itself (e.g. child spawned an interactive instance of fish).
+    int result = killpg(pgid.value(), SIGHUP);
+    // We don't care if killpg failed because it likely means there are no grandchildren to kill,
+    // but we use the result as an optimization to not bother sending SIGCONT.
+    if (result == 0) {
+        // Send SIGCONT so any stopped grandchildren can process the SIGHUP
+        killpg(pgid.value(), SIGCONT);
+    }
     if (tcsetpgrp(STDIN_FILENO, getpgrp()) == -1) {
         if (errno == ENOTTY) redirect_tty_output();
         FLOGF(warning, _(L"Could not return shell to foreground"));
