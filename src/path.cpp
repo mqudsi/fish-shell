@@ -117,8 +117,128 @@ static bool path_get_path_core(const wcstring &cmd, wcstring *out_path,
     return false;
 }
 
+struct path_cache_key_t {
+    wcstring cmd_;
+    wcstring_list_t path_;
+
+    /*path_cache_key_t() = default;
+    path_cache_key_t(&path_key_t other) {
+        cmd = other.cmd;
+        path = other.path;
+    }*/
+
+    path_cache_key_t(const wcstring &cmd, const wcstring_list_t &path) {
+        cmd_ = cmd;
+        path_ = path;
+    }
+
+    const wcstring &cmd() const { return cmd_; }
+    // const maybe_t<wcstring_list_t> &path() const { return path_; }
+    const wcstring_list_t &path() const { return path_; }
+};
+
+struct path_cache_record_t {
+    time_t timestamp_;
+    maybe_t<wcstring> result_;
+
+    /*path_cache_record_t() = default;
+    path_cache_record_t(&path_cache_t other) {
+        timestamp = other.timestamp;
+        result = other.result;
+    }*/
+
+    const time_t &timestamp() const { return timestamp_; }
+    maybe_t<std::reference_wrapper<const wcstring>> result() const {
+        if (result_) {
+            return std::cref(*result_);
+        }
+        return none_t::none;
+    }
+
+    bool found() const { return result_.has_value(); };
+};
+
+constexpr int MAX_CACHED_CMD_AGE = 5;
+constexpr int MAX_CACHE_SIZE = 15;
+typedef std::pair<path_cache_key_t, path_cache_record_t> cache_pair_t;
+struct path_cache_t {
+   private:
+    std::vector<cache_pair_t> cache_;
+
+   public:
+    const maybe_t<std::reference_wrapper<const path_cache_record_t>> get(
+        const wcstring &cmd, const wcstring_list_t &path) const {
+        time_t now;
+        time(&now);
+
+        for (const auto &kv : cache_) {
+            if (kv.first.cmd() == cmd && kv.first.path() == path &&
+                now - kv.second.timestamp() < MAX_CACHED_CMD_AGE) {
+                return std::cref(kv.second);
+            }
+        }
+
+        return none_t::none;
+    }
+
+    maybe_t<std::reference_wrapper<const wcstring>> set(wcstring cmd, wcstring_list_t path,
+                                                        maybe_t<wcstring> result) {
+        time_t now;
+        time(&now);
+
+        cache_pair_t *oldest = nullptr;
+        for (auto &kv : cache_) {
+            if (kv.first.cmd() == cmd && kv.first.path() == path) {
+                kv.second = path_cache_record_t{now, std::move(result)};
+                return kv.second.result();
+            }
+
+            if (!oldest || oldest->second.timestamp() > kv.second.timestamp()) {
+                oldest = &kv;
+            }
+        }
+
+        path_cache_key_t key(cmd, path);
+        path_cache_record_t record = path_cache_record_t{std::move(now), std::move(result)};
+
+        if (cache_.size() == MAX_CACHE_SIZE) {
+            debug(1, "replacing old record");
+            oldest->first = std::move(key);
+            oldest->second = std::move(record);
+            return oldest->second.result();
+        } else {
+            auto index = cache_.size();
+            cache_.emplace_back(key, record);
+            return cache_[index].second.result();
+        }
+    }
+};
+
+thread_local path_cache_t path_cache;
 bool path_get_path(const wcstring &cmd, wcstring *out_path, const environment_t &vars) {
-    return path_get_path_core(cmd, out_path, vars.get(L"PATH"));
+    auto path_var = vars.get(L"PATH");
+    auto &path = path_var ? path_var->as_list() : wcstring_list_t{};
+    auto &cached = path_cache.get(cmd, path);
+    if (cached) {
+        debug(1, L"Cache hit: %S", cmd.c_str());
+        bool found = cached->get().found();
+        if (out_path && found) {
+            *out_path = *cached->get().result();
+        }
+        return found;
+    }
+    debug(1, L"Cache miss: %S", cmd.c_str());
+    wcstring temp_out;
+    auto found = path_get_path_core(cmd, &temp_out, vars.get(L"PATH"));
+    if (found) {
+        if (out_path) {
+            *out_path = temp_out;
+        }
+        path_cache.set(std::move(cmd), std::move(path), temp_out);
+    } else if (!found) {
+        path_cache.set(std::move(cmd), std::move(path), none_t::none);
+    }
+    return found;
 }
 
 wcstring_list_t path_get_paths(const wcstring &cmd, const environment_t &vars) {

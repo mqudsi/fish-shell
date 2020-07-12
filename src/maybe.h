@@ -130,10 +130,14 @@ class maybe_t : private maybe_detail::conditionally_copyable_t<T> {
 
    public:
     // return whether the receiver contains a value.
-    bool has_value() const { return impl_.filled; }
+    inline bool has_value() const { return impl_.filled; }
 
     // bool conversion indicates whether the receiver contains a value.
-    explicit operator bool() const { return impl_.filled; }
+    explicit inline operator bool() const { return impl_.filled; }
+
+    inline bool operator==(const maybe_t &other) {
+        return (!has_value() && !other.has_value()) || (**this == *other);
+    }
 
     // The default constructor constructs a maybe with no value.
     maybe_t() = default;
