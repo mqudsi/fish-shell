@@ -1,0 +1,40 @@
+trigger:
+  - master
+
+pool: self-hosted
+
+steps:
+  - task: Bash@3
+    displayName: Check out repository
+    inputs:
+      targetType: inline
+      script: |
+        git fetch origin $Build.SourceBranch
+        git reset --hard FETCH_HEAD
+      workingDirectory: /tmp/fish-shell-ci/fish-shell
+
+  - task: Bash@3
+    displayName: Clean build output
+    inputs:
+      targetType: inline
+      script: |
+        rm -rf build
+      workingDirectory: /tmp/fish-shell-ci/fish-shell
+
+  - task: CMake@1
+    displayName: Initialize CMake project
+    inputs:
+      workingDirectory: /tmp/fish-shell-ci/fish-shell
+      cmakeArgs: .. -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+  - task: CMake@1
+    displayName: Build project
+    inputs:
+      workingDirectory: /tmp/fish-shell-ci/fish-shell
+      cmakeArgs: '--build build'
+
+  - task: CMake@1
+    displayName: Run tests
+    inputs:
+      workingDirectory: /tmp/fish-shell-ci/fish-shell
+      cmakeArgs: '--build build --target test'
