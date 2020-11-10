@@ -1,7 +1,7 @@
 trigger:
   - master
 
-pool: self-hosted
+pool: fish
 
 steps:
   - task: Bash@3
