@@ -98,8 +98,8 @@ struct complete_entry_opt_t {
     wcstring comp;
     // Description of the completion.
     wcstring desc;
-    // Conditions under which to use the option.
-    wcstring_list_t condition;
+    // Conditions under which to use the option, expanded and evaluated at completion time.
+    wcstring_list_t conditions;
     // Determines how completions should be performed on the argument after the switch.
     completion_mode_t result_mode;
     // Completion flags.
@@ -461,7 +461,10 @@ bool completer_t::condition_test(const wcstring &condition) {
 
 bool completer_t::condition_test(const wcstring_list_t &conditions) {
     for (const auto &c : conditions) {
-        if (!condition_test(c)) return false;
+        if (!condition_test(c)) {
+            FLOGF(complete, L"Condition not met: %ls", c.c_str());
+            return false;
+        }
     }
     return true;
 }
@@ -874,7 +877,10 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
                         arg = param_match2(&o, str.c_str());
                     }
 
-                    if (this->condition_test(o.condition)) {
+                    FLOGF(complete, L"Evaluating conditions for switch completion \"%ls\" (%ls)",
+                            o.comp.c_str(), o.desc.c_str());
+                    if (this->condition_test(o.conditions)) {
+                        FLOGF(complete, L"Conditions met");
                         if (o.type == option_type_short) {
                             // Only override a true last_option_requires_param value with a false one
                             if (last_option_requires_param.has_value()) {
@@ -900,13 +906,17 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
 
                 // If we are using old style long options, check for them first.
                 for (const complete_entry_opt_t &o : options) {
-                    if (o.type == option_type_single_long && param_match(&o, popt.c_str()) &&
-                        this->condition_test(o.condition)) {
-                        old_style_match = true;
-                        if (o.result_mode.requires_param) use_common = false;
-                        if (o.result_mode.no_files) use_files = false;
-                        if (o.result_mode.force_files) has_force = true;
-                        complete_from_args(str, o.comp, o.localized_desc(), o.flags);
+                    if (o.type == option_type_single_long && param_match(&o, popt.c_str())) {
+                        FLOGF(complete, L"Evaluating conditions for old-style opt completion \"%ls\" (%ls)",
+                                o.comp.c_str(), o.desc.c_str());
+                        if (this->condition_test(o.conditions)) {
+                            FLOGF(complete, L"Conditions met");
+                            old_style_match = true;
+                            if (o.result_mode.requires_param) use_common = false;
+                            if (o.result_mode.no_files) use_files = false;
+                            if (o.result_mode.force_files) has_force = true;
+                            complete_from_args(str, o.comp, o.localized_desc(), o.flags);
+                        }
                     }
                 }
 
@@ -931,11 +941,17 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
                         } else if (o.type == option_type_double_long) {
                             match = param_match(&o, popt.c_str());
                         }
-                        if (match && this->condition_test(o.condition)) {
-                            if (o.result_mode.requires_param) use_common = false;
-                            if (o.result_mode.no_files) use_files = false;
-                            if (o.result_mode.force_files) has_force = true;
-                            complete_from_args(str, o.comp, o.localized_desc(), o.flags);
+
+                        if (match) {
+                            FLOGF(complete, L"Evaluating conditions for short opt completion \"%ls\" (%ls)",
+                                    o.comp.c_str(), o.desc.c_str());
+                            if (this->condition_test(o.conditions)) {
+                                FLOGF(complete, L"Conditions met");
+                                if (o.result_mode.requires_param) use_common = false;
+                                if (o.result_mode.no_files) use_files = false;
+                                if (o.result_mode.force_files) has_force = true;
+                                complete_from_args(str, o.comp, o.localized_desc(), o.flags);
+                            }
                         }
                     }
                 }
@@ -953,11 +969,31 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
 
         // Now we try to complete an option itself
         for (const complete_entry_opt_t &o : options) {
+
+            // Delay evaluating conditions until the last possible minute
+            maybe_t<bool> condition_result = none();
+            auto test_conditions = [this, &condition_result, &o]() -> bool {
+                if (condition_result.has_value()) {
+                    return condition_result.value();
+                }
+
+                FLOGF(complete, L"Evaluating conditions for completion \"%ls\" (%ls)",
+                        o.comp.c_str(), o.desc.c_str());
+                if (!this->condition_test(o.conditions)) {
+                    condition_result = false;
+                } else {
+                    condition_result = true;
+                    FLOGF(complete, L"Conditions met");
+                }
+
+                return *condition_result;
+            };
+
             // If this entry is for the base command, check if any of the arguments match.
-            if (!this->condition_test(o.condition)) continue;
             if (o.option.empty()) {
                 use_files = use_files && (!(o.result_mode.no_files));
                 has_force = has_force || o.result_mode.force_files;
+                if (!test_conditions()) continue;
                 complete_from_args(str, o.comp, o.localized_desc(), o.flags);
             }
 
@@ -981,6 +1017,10 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
                     // .. and the option is not already there.
                     if (str.find(optchar) != wcstring::npos) continue;
                 }
+                if (!test_conditions()) {
+                    continue;
+                }
+
                 // It's a match.
                 wcstring desc = o.localized_desc();
                 // Append a short-style option
@@ -1023,6 +1063,8 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
             req_arg = o.result_mode.requires_param;
 
             if (o.type == option_type_double_long && (has_arg && !req_arg)) {
+                if (!test_conditions()) continue;
+
                 // Optional arguments to a switch can only be handled using the '=', so we add it as
                 // a completion. By default we avoid using '=' and instead rely on '--switch
                 // switch-arg', since it is more commonly supported by homebrew getopt-like
@@ -1036,6 +1078,7 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
             }
 
             // Append a long-style option
+            if (!test_conditions()) continue;
             if (!this->completions.add(whole_opt.substr(offset), C_(o.desc), flags)) {
                 return false;
             }
@@ -1701,7 +1744,7 @@ void complete_add(const wcstring &cmd, bool cmd_is_path, const wcstring &option,
     opt.result_mode = result_mode;
 
     if (comp) opt.comp = comp;
-    opt.condition = std::move(condition);
+    opt.conditions = std::move(condition);
     if (desc) opt.desc = desc;
     opt.flags = flags;
 
@@ -1797,7 +1840,7 @@ static wcstring completion2string(const completion_key_t &key, const complete_en
 
     append_switch(out, L'd', C_(o.desc));
     append_switch(out, L'a', o.comp);
-    for (const auto &c : o.condition) {
+    for (const auto &c : o.conditions) {
         append_switch(out, L'n', c);
     }
     out.append(L"\n");
