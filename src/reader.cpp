@@ -1299,7 +1299,7 @@ static history_pager_result_t history_pager_search(const std::shared_ptr<history
     while (completions.size() < page_size && next_match_found) {
         const history_item_t &item = search.current_item();
         completions.push_back(completion_t{
-            item.str(), L"", string_fuzzy_match_t::exact_match(),
+            item.str(), wcowstr_t::ref(g_empty_string), string_fuzzy_match_t::exact_match(),
             COMPLETE_REPLACES_COMMANDLINE | COMPLETE_DONT_ESCAPE | COMPLETE_DONT_SORT});
 
         next_match_found = search.go_to_next_match(direction);

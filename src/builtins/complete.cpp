@@ -420,9 +420,9 @@ maybe_t<int> builtin_complete(parser_t &parser, io_streams_t &streams, const wch
                 }
 
                 // Append any description.
-                if (!next.description.empty()) {
+                if (!next.description->empty()) {
                     faux_cmdline_with_completion.reserve(faux_cmdline_with_completion.size() + 2 +
-                                                         next.description.size());
+                                                         next.description->size());
                     faux_cmdline_with_completion.push_back(L'\t');
                     faux_cmdline_with_completion.append(next.description);
                 }

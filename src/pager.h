@@ -87,7 +87,7 @@ class pager_t {
         /// The description.
         wcstring desc{};
         /// The representative completion.
-        completion_t representative{L""};
+        completion_t representative{L"", wcowstr_t::ref(g_empty_string)};
         /// The per-character highlighting, used when this is a full shell command.
         std::vector<highlight_spec_t> colors{};
         /// On-screen width of the completion string.

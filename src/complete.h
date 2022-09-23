@@ -15,6 +15,7 @@
 
 //#include "expand.h"
 #include "common.h"
+#include "cow.h"
 #include "wcstringutil.h"
 
 struct completion_mode_t {
@@ -72,14 +73,14 @@ class completion_t {
     /// The completion string.
     wcstring completion;
     /// The description for this completion.
-    wcstring description;
+    wcowstr_t description;
     /// The type of fuzzy match.
     string_fuzzy_match_t match;
     /// Flags determining the completion behavior.
     complete_flags_t flags;
 
     // Construction.
-    explicit completion_t(wcstring comp, wcstring desc = wcstring(),
+    explicit completion_t(wcstring comp, wcowstr_t desc,
                           string_fuzzy_match_t match = string_fuzzy_match_t::exact_match(),
                           complete_flags_t flags_val = 0);
     completion_t(const completion_t &);
@@ -153,7 +154,7 @@ class completion_receiver_t {
     /// \return true on success, false if this would overflow the limit.
     /// The 'desc' parameter is not && because if gettext is not enabled, then we end
     /// up passing a 'const wcstring &' here.
-    __warn_unused bool add(wcstring &&comp, wcstring desc, complete_flags_t flags = 0,
+    __warn_unused bool add(wcstring &&comp, wcowstr_t &&desc, complete_flags_t flags = 0,
                            string_fuzzy_match_t match = string_fuzzy_match_t::exact_match());
 
     /// Add a list of completions.
@@ -274,7 +275,8 @@ wcstring complete_print(const wcstring &cmd = L"");
 /// \param comp The completion string
 /// \param desc The description of the completion
 /// \param flags completion flags
-void append_completion(completion_list_t *completions, wcstring comp, wcstring desc = wcstring(),
+void append_completion(completion_list_t *completions, wcstring comp,
+                       wcowstr_t desc = wcowstr_t::ref(g_empty_string),
                        complete_flags_t flags = 0,
                        string_fuzzy_match_t match = string_fuzzy_match_t::exact_match());
 

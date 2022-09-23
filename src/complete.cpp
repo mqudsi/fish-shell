@@ -187,8 +187,8 @@ static complete_flags_t resolve_auto_space(const wcstring &comp, complete_flags_
 }
 
 /// completion_t functions. Note that the constructor resolves flags!
-completion_t::completion_t(wcstring comp, wcstring desc, string_fuzzy_match_t mat,
-                           complete_flags_t flags_val)
+completion_t::completion_t(wcstring comp, wcowstr_t desc = wcowstr_t::ref(g_empty_string),
+                           string_fuzzy_match_t mat, complete_flags_t flags_val)
     : completion(std::move(comp)),
       description(std::move(desc)),
       match(mat),
@@ -224,9 +224,11 @@ bool completion_receiver_t::add(completion_t &&comp) {
     return true;
 }
 
-bool completion_receiver_t::add(wcstring &&comp) { return this->add(std::move(comp), wcstring{}); }
+bool completion_receiver_t::add(wcstring &&comp) {
+    return this->add(std::move(comp), wcowstr_t::ref(g_empty_string));
+}
 
-bool completion_receiver_t::add(wcstring &&comp, wcstring desc, complete_flags_t flags,
+bool completion_receiver_t::add(wcstring &&comp, wcowstr_t &&desc, complete_flags_t flags,
                                 string_fuzzy_match_t match) {
     return this->add(completion_t(std::move(comp), std::move(desc), match, flags));
 }
@@ -608,7 +610,9 @@ void completer_t::complete_cmd_desc(const wcstring &str) {
     for (auto &completion : completions.get_list()) {
         const wcstring &el = completion.completion;
         auto new_desc_iter = lookup.find(el);
-        if (new_desc_iter != lookup.end()) completion.description = new_desc_iter->second;
+        if (new_desc_iter != lookup.end()) {
+            completion.description = wcowstr_t::clone(new_desc_iter->second);
+        }
     }
 }
 
@@ -993,9 +997,9 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
                     if (str.find(optchar) != wcstring::npos) continue;
                 }
                 // It's a match.
-                wcstring desc = o.localized_desc();
+                const wcstring &desc = o.localized_desc();
                 // Append a short-style option
-                if (!this->completions.add(wcstring{o.option}, std::move(desc), 0)) {
+                if (!this->completions.add(wcstring{o.option}, wcowstr_t::ref(desc), 0)) {
                     return false;
                 }
             }
@@ -1040,14 +1044,15 @@ bool completer_t::complete_param_for_command(const wcstring &cmd_orig, const wcs
                 // functions.
                 wcstring completion = format_string(L"%ls=", whole_opt.c_str() + offset);
                 // Append a long-style option with a mandatory trailing equal sign
-                if (!this->completions.add(std::move(completion), C_(o.desc),
+                if (!this->completions.add(std::move(completion), wcowstr_t::ref(C_(o.desc)),
                                            flags | COMPLETE_NO_SPACE)) {
                     return false;
                 }
             }
 
             // Append a long-style option
-            if (!this->completions.add(whole_opt.substr(offset), C_(o.desc), flags)) {
+            wcowstr_t desc = wcowstr_t::ref(C_(o.desc));
+            if (!this->completions.add(whole_opt.substr(offset), std::move(desc), flags)) {
                 return false;
             }
         }
@@ -1330,7 +1335,7 @@ cleanup_t completer_t::apply_var_assignments(const wcstring_list_t &var_assignme
         wcstring_list_t vals;
         if (expand_ret == expand_result_t::ok) {
             for (auto &completion : expression_expanded) {
-                vals.emplace_back(std::move(completion.completion));
+                vals.push_back(std::move(completion.completion));
             }
         }
         ctx.parser->vars().set(variable_name, ENV_LOCAL | ENV_EXPORT, std::move(vals));
@@ -1697,7 +1702,7 @@ void completer_t::perform_for_commandline(wcstring cmdline) {
 }  // namespace
 
 /// Create a new completion entry.
-void append_completion(completion_list_t *completions, wcstring comp, wcstring desc,
+void append_completion(completion_list_t *completions, wcstring comp, wcowstr_t desc,
                        complete_flags_t flags, string_fuzzy_match_t match) {
     completions->emplace_back(std::move(comp), std::move(desc), match, flags);
 }
