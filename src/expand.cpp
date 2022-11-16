@@ -564,6 +564,47 @@ static expand_result_t expand_braces(wcstring &&instr, expand_flags_t flags,
         return expand_result_t::ok;
     }
 
+    // Handle brace expansions with only one top-level item differently. We now treat these as
+    // literal input rather than a brace expansion to minimize accidental use of brace expansions.
+    // See #4632 && #9351.
+    if (brace_begin != nullptr && last_sep == nullptr) {
+        int brace_count = 0;
+        std::vector<wcstring> tokens;
+        tokens.reserve(1);
+        wcstring::iterator start = instr.begin();
+        for (auto i = instr.begin(); i != instr.end(); ++i) {
+            auto &c = *i;
+
+            if (c == BRACE_BEGIN) {
+                brace_count += 1;
+                if (brace_count == 1) {
+                    c = L'{';
+                }
+            } else if (c == BRACE_END) {
+                brace_count -= 1;
+                if (brace_count == 0) {
+                    c = L'}';
+                }
+            } else if (brace_count == 1 && c == BRACE_SPACE) {
+                if (start != i) {
+                    tokens.emplace_back(start, i);
+                }
+                while (*i + 1 == BRACE_SPACE) {
+                    ++i;
+                }
+                start = i + 1;
+            }
+        }
+        if (start != instr.end()) {
+            tokens.emplace_back(start, instr.end());
+        }
+
+        for (auto &t : tokens) {
+            expand_braces(std::move(t), flags, out, errors);
+        }
+        return expand_result_t::ok;
+    }
+
     length_preceding_braces = (brace_begin - in);
     length_following_braces = instr.size() - (brace_end - in) - 1;
     tot_len = length_preceding_braces + length_following_braces;

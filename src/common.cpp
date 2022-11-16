@@ -1452,14 +1452,14 @@ static bool unescape_string_internal(const wchar_t *const input, const size_t in
                             // HACK: To reduce accidental use of brace expansion, treat a brace
                             // with zero or one items as literal input. See #4632. (The hack is
                             // doing it here and like this.)
-                            if (vars_or_seps.empty() || vars_or_seps.back() < braces.back()) {
+                            /*if (vars_or_seps.empty() || vars_or_seps.back() < braces.back()) {
                                 result[braces.back()] = L'{';
                                 // We also need to turn all spaces back.
                                 for (size_t i = braces.back() + 1; i < result.size(); i++) {
                                     if (result[i] == BRACE_SPACE) result[i] = L' ';
                                 }
                                 to_append_or_none = L'}';
-                            }
+                            }*/
 
                             // Remove all seps inside the current brace pair, so if we have a
                             // surrounding pair we only get seps inside *that*.
