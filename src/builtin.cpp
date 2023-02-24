@@ -495,7 +495,7 @@ proc_status_t builtin_run(parser_t &parser, const wcstring_list_t &argv, io_stre
 }
 
 /// Returns a list of all builtin names.
-wcstring_list_t builtin_get_names() {
+std::vector<std::wstring> builtin_get_names() {
     wcstring_list_t result;
     result.reserve(BUILTIN_COUNT);
     for (const auto &builtin_data : builtin_datas) {
@@ -505,7 +505,7 @@ wcstring_list_t builtin_get_names() {
 }
 
 /// Insert all builtin names into list.
-void builtin_get_names(completion_list_t *list) {
+void builtin_get_names_as_list(completion_list_t *list) {
     assert(list != nullptr);
     list->reserve(list->size() + BUILTIN_COUNT);
     for (const auto &builtin_data : builtin_datas) {

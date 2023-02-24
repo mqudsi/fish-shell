@@ -78,6 +78,7 @@ include_cpp! {
     generate_pod!("RustFFIProcList")
     generate_pod!("RustBuiltin")
 
+    generate!("builtin_get_names")
     generate!("builtin_missing_argument")
     generate!("builtin_unknown_option")
     generate!("builtin_print_help")

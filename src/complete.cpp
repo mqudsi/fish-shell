@@ -668,7 +668,7 @@ void completer_t::complete_cmd(const wcstring &str_cmd) {
         possible_comp.clear();
 
         // Append all matching builtins
-        builtin_get_names(&possible_comp);
+        builtin_get_names_as_list(&possible_comp);
         this->complete_strings(str_cmd, builtin_get_desc, possible_comp, 0);
     }
 }
