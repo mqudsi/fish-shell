@@ -142,7 +142,7 @@ static dir_remoteness_t path_remoteness(const wcstring &path) {
 #endif
 }
 
-wcstring_list_t path_get_paths(const wcstring &cmd, const environment_t &vars) {
+std::vector<std::wstring> path_get_paths(const wcstring &cmd, const environment_t &vars) {
     FLOGF(path, L"path_get_paths('%ls')", cmd.c_str());
     wcstring_list_t paths;
 

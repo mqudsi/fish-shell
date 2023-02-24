@@ -31,6 +31,7 @@ include_cpp! {
     #include "parse_constants.h"
     #include "parser.h"
     #include "parse_util.h"
+    #include "path.h"
     #include "proc.h"
     #include "tokenizer.h"
     #include "wildcard.h"

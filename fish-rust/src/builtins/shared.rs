@@ -39,6 +39,8 @@ pub const BUILTIN_ERR_NOT_NUMBER: &str = "%ls: %ls: invalid integer\n";
 
 pub const BUILTIN_ERR_ARG_COUNT1: &str = "%ls: expected %d arguments; got %d\n";
 
+pub const BUILTIN_ERR_COMBO: &str = "%ls: invalid option combination\n";
+
 /// A handy return value for successful builtins.
 pub const STATUS_CMD_OK: Option<c_int> = Some(0);
 
@@ -145,6 +147,7 @@ pub fn run_builtin(
         RustBuiltin::Random => super::random::random(parser, streams, args),
         RustBuiltin::Realpath => super::realpath::realpath(parser, streams, args),
         RustBuiltin::Return => super::r#return::r#return(parser, streams, args),
+        RustBuiltin::Type => super::r#type::r#type(parser, streams, args),
         RustBuiltin::Wait => wait::wait(parser, streams, args),
         RustBuiltin::Printf => printf::printf(parser, streams, args),
     }

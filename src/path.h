@@ -63,7 +63,7 @@ struct get_path_result_t {
 get_path_result_t path_try_get_path(const wcstring &cmd, const environment_t &vars);
 
 /// Return all the paths that match the given command.
-wcstring_list_t path_get_paths(const wcstring &cmd, const environment_t &vars);
+std::vector<std::wstring> path_get_paths(const wcstring &cmd, const environment_t &vars);
 
 std::vector<std::string> path_get_paths_from_parser(const wcstring &cmd, const parser_t &parser);
 
