@@ -128,7 +128,7 @@ set(FISH_SRCS
     src/signals.cpp src/termsize.cpp src/tinyexpr.cpp
     src/trace.cpp src/utf8.cpp
     src/wait_handle.cpp src/wcstringutil.cpp src/wgetopt.cpp src/wildcard.cpp
-    src/wutil.cpp src/fds.cpp src/rustffi.cpp
+    src/wutil.cpp src/fds.cpp src/rustffi.cpp src/test.cpp
 )
 
 # Header files are just globbed.

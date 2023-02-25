@@ -36,3 +36,4 @@ mod wgetopt;
 mod wutil;
 
 mod builtins;
+mod vec_test;
