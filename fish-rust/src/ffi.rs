@@ -78,7 +78,7 @@ include_cpp! {
     generate_pod!("RustFFIProcList")
     generate_pod!("RustBuiltin")
 
-    generate!("builtin_get_names")
+    generate!("builtin_exists")
     generate!("builtin_missing_argument")
     generate!("builtin_unknown_option")
     generate!("builtin_print_help")
@@ -100,6 +100,9 @@ include_cpp! {
     generate!("io_chain_t")
 
     generate!("env_var_t")
+    generate!("function_exists")
+    generate!("path_get_paths")
+    generate!("path_get_paths_from_parser")
 }
 
 impl parser_t {

@@ -83,6 +83,7 @@ proc_status_t builtin_run(parser_t &parser, const wcstring_list_t &argv, io_stre
 
 std::vector<std::wstring> builtin_get_names();
 void builtin_get_names_as_list(completion_list_t *list);
+
 const wchar_t *builtin_get_desc(const wcstring &name);
 
 wcstring builtin_help_get(parser_t &parser, const wchar_t *cmd);
