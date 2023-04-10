@@ -25,6 +25,8 @@ include_cpp! {
     #include "fallback.h"
     #include "fds.h"
     #include "flog.h"
+    #include "function.h"
+    #include "highlight.h"
     #include "io.h"
     #include "parse_constants.h"
     #include "parser.h"
@@ -110,6 +112,8 @@ include_cpp! {
     generate!("function_exists")
     generate!("path_get_paths")
     generate!("path_get_paths_from_parser")
+
+    generate!("colorize_shell")
 }
 
 impl parser_t {
