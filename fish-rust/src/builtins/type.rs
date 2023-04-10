@@ -56,33 +56,42 @@ pub fn r#type(
         wopt(L!("quiet"), woption_argument_t::no_argument, 'q'),
     ];
 
-    let mut w = wgetopter_t::new(shortopts, longopts, argv);
-    while let Some(c) = w.wgetopt_long() {
-        match c {
-            'a' => opts.all = true,
-            's' => opts.short_output = true,
-            'f' => opts.no_functions = true,
-            't' => opts.get_type = true,
-            'p' => opts.path = true,
-            'P' => opts.force_path = true,
-            'q' => opts.query = true,
-            'h' => {
-                builtin_print_help(parser, streams, cmd);
-                return STATUS_CMD_OK;
-            }
-            ':' => {
-                builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
-            }
-            '?' => {
-                builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
-            }
-            _ => {
-                panic!("unexpected retval from wgeopter.next()");
+    let optind = {
+        let mut w = wgetopter_t::new(shortopts, longopts, argv);
+        while let Some(c) = w.wgetopt_long() {
+            match c {
+                'a' => opts.all = true,
+                's' => opts.short_output = true,
+                'f' => opts.no_functions = true,
+                't' => opts.get_type = true,
+                'p' => opts.path = true,
+                'P' => opts.force_path = true,
+                'q' => opts.query = true,
+                'h' => {
+                    builtin_print_help(parser, streams, cmd);
+                    return STATUS_CMD_OK;
+                }
+                ':' => {
+                    builtin_missing_argument(
+                        parser,
+                        streams,
+                        cmd,
+                        argv[w.woptind - 1],
+                        print_hints,
+                    );
+                    return STATUS_INVALID_ARGS;
+                }
+                '?' => {
+                    builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
+                    return STATUS_INVALID_ARGS;
+                }
+                _ => {
+                    panic!("unexpected retval from wgeopter.next()");
+                }
             }
         }
-    }
+        w.woptind
+    };
 
     if opts.query as i64 + opts.path as i64 + opts.get_type as i64 + opts.force_path as i64 > 1 {
         streams.err.append(wgettext_fmt!(BUILTIN_ERR_COMBO, cmd));
@@ -91,8 +100,7 @@ pub fn r#type(
 
     let mut res = false;
 
-    for i in w.woptind..argc {
-        let arg = argv[i];
+    for arg in argv.iter().take(argc).skip(optind) {
         let mut found = 0;
         if !opts.force_path && !opts.no_functions && function_exists(&arg.to_ffi(), parser.pin()) {
             found += 1;
