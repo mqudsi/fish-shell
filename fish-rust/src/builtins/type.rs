@@ -201,7 +201,11 @@ pub fn r#type(
                 break;
             }
             if !opts.all {
-                continue;
+                // We need to *break* out of this loop
+                // and continue on to the next argument,
+                // otherwise we would print every other path
+                // for a given argument.
+                break;
             }
         }
 
