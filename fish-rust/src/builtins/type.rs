@@ -101,7 +101,7 @@ pub fn r#type(
                 let path = function_get_definition_file(&arg.to_ffi(), parser.pin()).from_ffi();
                 let mut comment = WString::new();
 
-                if *path == "" {
+                if (*path).is_empty() {
                     comment.push_utfstr(&wgettext_fmt!("Defined interactively"));
                 } else if *path == "-" {
                     comment.push_utfstr(&wgettext_fmt!("Defined via `source`"));
@@ -114,7 +114,7 @@ pub fn r#type(
                 if function_is_copy(&arg.to_ffi(), parser.pin()) {
                     let path =
                         function_get_copy_definition_file(&arg.to_ffi(), parser.pin()).from_ffi();
-                    if *path == "" {
+                    if (*path).is_empty() {
                         comment.push_utfstr(&wgettext_fmt!(", copied interactively"));
                     } else if *path == "-" {
                         comment.push_utfstr(&wgettext_fmt!(", copied via `source`"));
