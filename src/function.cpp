@@ -165,6 +165,39 @@ function_properties_ref_t function_get_props(const wcstring &name) {
     return function_set.acquire()->get_props(name);
 }
 
+wcstring function_get_definition_file(const wcstring &name, parser_t &parser) {
+    auto props = function_get_props_autoload(name, parser);
+    if (!props || !props->definition_file) return L"";
+    return *props->definition_file;
+}
+
+wcstring function_get_copy_definition_file(const wcstring &name, parser_t &parser) {
+    auto props = function_get_props_autoload(name, parser);
+    if (!props || !props->copy_definition_file) return L"";
+    return *props->copy_definition_file;
+}
+bool function_is_copy(const wcstring &name, parser_t &parser) {
+    auto props = function_get_props_autoload(name, parser);
+    if (!props) return false;
+    return props->is_copy;
+}
+int function_get_definition_lineno(const wcstring &name, parser_t &parser) {
+    auto props = function_get_props_autoload(name, parser);
+    if (!props) return 0;
+    return props->definition_lineno();
+}
+int function_get_copy_definition_lineno(const wcstring &name, parser_t &parser) {
+    auto props = function_get_props_autoload(name, parser);
+    if (!props) return 0;
+    return props->copy_definition_lineno;
+}
+
+wcstring function_get_annotated_definition(const wcstring &name, parser_t &parser) {
+    auto props = function_get_props_autoload(name, parser);
+    if (!props) return L"";
+    return props->annotated_definition(name);
+}
+
 function_properties_ref_t function_get_props_autoload(const wcstring &name, parser_t &parser) {
     parser.assert_can_execute();
     if (parser_keywords_is_reserved(name)) return nullptr;

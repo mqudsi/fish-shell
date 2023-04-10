@@ -78,6 +78,13 @@ void function_remove(const wcstring &name);
 /// \return the properties for a function, or nullptr if none. This does not trigger autoloading.
 function_properties_ref_t function_get_props(const wcstring &name);
 
+wcstring function_get_definition_file(const wcstring &name, parser_t &parser);
+wcstring function_get_copy_definition_file(const wcstring &name, parser_t &parser);
+bool function_is_copy(const wcstring &name, parser_t &parser);
+int function_get_definition_lineno(const wcstring &name, parser_t &parser);
+int function_get_copy_definition_lineno(const wcstring &name, parser_t &parser);
+wcstring function_get_annotated_definition(const wcstring &name, parser_t &parser);
+
 /// \return the properties for a function, or nullptr if none, perhaps triggering autoloading.
 function_properties_ref_t function_get_props_autoload(const wcstring &name, parser_t &parser);
 
