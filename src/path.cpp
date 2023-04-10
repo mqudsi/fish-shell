@@ -168,8 +168,13 @@ wcstring_list_t path_get_paths(const wcstring &cmd, const environment_t &vars) {
     return paths;
 }
 
-std::vector<std::wstring> path_get_paths_from_parser(const wcstring &cmd, const parser_t &parser) {
-    return path_get_paths(cmd, parser.vars());
+std::vector<std::string> path_get_paths_from_parser(const wcstring &cmd, const parser_t &parser) {
+    std::vector<std::string> ret;
+    auto wide = path_get_paths(cmd, parser.vars());
+    for (const auto &w: wide) {
+        ret.push_back(wcs2string(w));
+    }
+    return ret;
 }
 
 wcstring_list_t path_apply_cdpath(const wcstring &dir, const wcstring &wd,

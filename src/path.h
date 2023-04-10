@@ -65,7 +65,7 @@ get_path_result_t path_try_get_path(const wcstring &cmd, const environment_t &va
 /// Return all the paths that match the given command.
 wcstring_list_t path_get_paths(const wcstring &cmd, const environment_t &vars);
 
-std::vector<std::wstring> path_get_paths_from_parser(const wcstring &cmd, const parser_t &parser);
+std::vector<std::string> path_get_paths_from_parser(const wcstring &cmd, const parser_t &parser);
 
 /// Returns the full path of the specified directory, using the CDPATH variable as a list of base
 /// directories for relative paths.
