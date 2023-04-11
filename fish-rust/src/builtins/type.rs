@@ -6,7 +6,6 @@ use crate::builtins::shared::{
     builtin_missing_argument, builtin_print_help, builtin_unknown_option, io_streams_t,
     BUILTIN_ERR_COMBO, STATUS_CMD_ERROR, STATUS_CMD_OK, STATUS_INVALID_ARGS,
 };
-use crate::common::str2wcstring;
 use crate::ffi::parser_t;
 use crate::ffi::Repin;
 use crate::ffi::{
@@ -190,13 +189,13 @@ pub fn r#type(
         }
 
         let paths = path_get_paths_from_parser(&arg.to_ffi(), parser);
-
-        for path in paths.iter() {
+        let paths: &cxx::UniquePtr<cxx::CxxVector<cxx::CxxWString>> =
+            unsafe { std::mem::transmute(&paths) };
+        for wpath in paths.iter() {
             found += 1;
             res = true;
+            let wpath = wstr::from_slice(wpath.as_wchars()).unwrap();
             if !opts.query && !opts.get_type {
-                let wpath: WString = str2wcstring(path.as_bytes());
-
                 if opts.path || opts.force_path {
                     streams.out.append(wgettext_fmt!("%ls\n", wpath));
                 } else {
