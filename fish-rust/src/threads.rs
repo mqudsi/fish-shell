@@ -49,6 +49,10 @@ static NOTIFY_SIGNALLER: once_cell::sync::Lazy<&'static crate::fd_monitor::FdEve
         result
     });
 
+/// Used to wait for all outstanding child threads to exit
+#[cfg(feature = "asan")]
+static CHILD_THREADS: rsevents_extra::CountdownEvent = rsevents_extra::CountdownEvent::new(0);
+
 #[cxx::bridge]
 mod ffi {
     unsafe extern "C++" {
@@ -75,6 +79,8 @@ mod ffi {
     extern "Rust" {
         #[cxx_name = "make_detached_pthread"]
         fn spawn_ffi(callback: &SharedPtr<CppCallback>) -> bool;
+        fn asan_before_exit();
+        fn asan_maybe_exit(code: i32);
     }
 
     extern "Rust" {
@@ -265,15 +271,29 @@ pub fn spawn<F: FnOnce() + Send + 'static>(callback: F) -> bool {
     // We don't have to port the PTHREAD_CREATE_DETACHED logic. Rust threads are detached
     // automatically if the returned join handle is dropped.
 
-    let result = match std::thread::Builder::new().spawn(callback) {
+    #[cfg(feature = "asan")]
+    {
+        CHILD_THREADS.increment();
+    }
+    let result = match std::thread::Builder::new().spawn(move || {
+        (callback)();
+        #[cfg(feature = "asan")]
+        {
+            CHILD_THREADS.decrement();
+        }
+    }) {
         Ok(handle) => {
-            let id = handle.thread().id();
-            FLOG!(iothread, "rust thread", id, "spawned");
+            let thread_id = handle.thread().id();
+            FLOG!(iothread, "rust thread", thread_id, "spawned");
             // Drop the handle to detach the thread
             drop(handle);
             true
         }
         Err(e) => {
+            #[cfg(feature = "asan")]
+            {
+                CHILD_THREADS.decrement();
+            }
             eprintln!("rust thread spawn failure: {e}");
             false
         }
@@ -297,6 +317,40 @@ fn spawn_ffi(callback: &cxx::SharedPtr<ffi::CppCallback>) -> bool {
     spawn(move || {
         callback.invoke();
     })
+}
+
+/// Exits calling onexit handlers if running under ASAN and `code == 0`, otherwise does nothing.
+///
+/// This function is always defined but is a no-op if not running under ASAN. This is to make it
+/// more ergonomic to call it where needed in general and to make it possible via ffi at all.
+pub fn asan_maybe_exit(#[allow(unused)] code: i32) {
+    #[cfg(feature = "asan")]
+    if code == 0 {
+        asan_before_exit();
+        unsafe {
+            libc::exit(code);
+        }
+    }
+}
+
+/// When running under ASAN, join child threads before exiting the parent process to avoid spurious
+/// memory leak warnings regarding TLS variables.
+///
+/// This function is always defined but is a no-op if not running under ASAN. This is to make it
+/// more ergonomic to call it where needed in general and to make it possible via ffi at all.
+pub fn asan_before_exit() {
+    #[cfg(feature = "asan")]
+    if !is_forked_child() {
+        if CHILD_THREADS.count() > 0 {
+            use rsevents_extra::Awaitable;
+
+            CHILD_THREADS.wait();
+            // CHILD_THREADS is set when all threads have finished work but they may not yet have
+            // necessarily exited and called their thread_atexit handlers, so we wait a bit for that
+            // to happen.
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    }
 }
 
 /// Data shared between the thread pool [`ThreadPool`] and worker threads [`WorkerThread`].
