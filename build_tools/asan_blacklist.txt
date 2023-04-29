@@ -1,3 +1,11 @@
 # Ignore a one-off leak in __cxa_thread_atexit_impl that isn't under our control.
 # See https://github.com/fish-shell/fish-shell/pull/9754#issuecomment-1523782989
+# and https://github.com/fish-shell/fish-shell/pull/9764
 fun:__cxa_thread_atexit_impl
+# std::sys_common::thread_info::set()
+fun:_ZN3std10sys_common11thread_info3set17h756abb188fef74feE
+fun:_*std*sys_common*thread_info*set*
+src:*src/sys_common/thread_info.rs
+# std::sys_common::thread_info::current_thread()
+fun:_ZN3std10sys_common11thread_info14current_thread17h8dcb78eca18fbaa0E
+fun:_*std*sys_common*thread_info*current_thread*
