@@ -6515,6 +6515,7 @@ int main(int argc, char **argv) {
     if (s_test_run_count == 0) say(L"*** No Tests Were Actually Run! ***");
 
     if (err_count != 0) {
-        return 1;
+        _exit(1);
     }
+    _exit(0);
 }
