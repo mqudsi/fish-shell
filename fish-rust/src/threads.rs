@@ -355,19 +355,15 @@ pub fn asan_maybe_exit(#[allow(unused)] code: i32) {
 /// This function is always defined but is a no-op if not running under ASAN. This is to make it
 /// more ergonomic to call it where needed in general and to make it possible via ffi at all.
 pub fn asan_before_exit() {
-    #[cfg(feature = "asan")]
-    if !is_forked_child() {
-        call_tls_dtors();
-        if CHILD_THREADS.count() > 0 {
-            use rsevents_extra::Awaitable;
-
-            CHILD_THREADS.wait_for(Duration::from_millis(100));
-            // // CHILD_THREADS is set when all threads have finished work but they may not yet have
-            // // necessarily exited and called their thread_atexit handlers, so we wait a bit for that
-            // // to happen.
-            // std::thread::sleep(Duration::from_millis(100));
-        }
-    }
+    // #[cfg(feature = "asan")]
+    // if !is_forked_child() {
+    //     call_tls_dtors();
+    //     if CHILD_THREADS.count() > 0 {
+    //         use rsevents_extra::Awaitable;
+    //
+    //         CHILD_THREADS.wait_for(Duration::from_millis(100));
+    //     }
+    // }
 }
 
 /// Data shared between the thread pool [`ThreadPool`] and worker threads [`WorkerThread`].
