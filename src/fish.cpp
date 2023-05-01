@@ -41,6 +41,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #include "common.h"
 #include "cxxgen.h"
 #include "env.h"
+#include "env_dispatch.h"
 #include "event.h"
 #include "expand.h"
 #include "fallback.h"  // IWYU pragma: keep
@@ -615,6 +616,7 @@ int main(int argc, char **argv) {
     if (debug_output) {
         fclose(debug_output);
     }
+    env_cleanup();
     asan_maybe_exit(exit_status);
     exit_without_destructors(exit_status);
     return EXIT_FAILURE;  // above line should always exit

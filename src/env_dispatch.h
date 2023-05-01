@@ -15,4 +15,6 @@ void env_dispatch_init(const environment_t &vars);
 /// React to changes in variables like LANG which require running some code.
 void env_dispatch_var_change(const wcstring &key, env_stack_t &vars);
 
+void env_cleanup();
+
 #endif
