@@ -26,6 +26,7 @@ fn main() -> miette::Result<()> {
         "src/abbrs.rs",
         "src/ast.rs",
         "src/env/env_ffi.rs",
+        "src/env_dispatch.rs",
         "src/event.rs",
         "src/common.rs",
         "src/fd_monitor.rs",

@@ -20,6 +20,7 @@ pub type wchar_t = u32;
 include_cpp! {
     #include "builtin.h"
     #include "common.h"
+    #include "complete.h"
     #include "env.h"
     #include "env_dispatch.h"
     #include "env_universal_common.h"
@@ -30,7 +31,9 @@ include_cpp! {
     #include "flog.h"
     #include "function.h"
     #include "highlight.h"
+    #include "history.h"
     #include "io.h"
+    #include "input_common.h"
     #include "kill.h"
     #include "parse_constants.h"
     #include "parser.h"
@@ -38,6 +41,7 @@ include_cpp! {
     #include "path.h"
     #include "proc.h"
     #include "reader.h"
+    #include "screen.h"
     #include "tokenizer.h"
     #include "wildcard.h"
     #include "wutil.h"
@@ -133,6 +137,19 @@ include_cpp! {
     generate!("kill_entries_ffi")
 
     generate!("get_history_variable_text_ffi")
+
+    generate!("is_interactive_session")
+    generate!("set_interactive_session")
+    generate!("screen_set_midnight_commander_hack")
+    generate!("screen_clear_layout_cache_ffi")
+    generate!("reader_schedule_prompt_repaint")
+    generate!("reader_change_history")
+    generate!("history_session_id")
+    generate!("reader_change_cursor_selection_mode")
+    generate!("reader_set_autosuggestion_enabled_ffi")
+    generate!("function_invalidate_path")
+    generate!("complete_invalidate_path")
+    generate!("update_wait_on_escape_ms_ffi")
 }
 
 impl parser_t {

@@ -388,7 +388,7 @@ impl EnvScopedImpl {
                 .map(|v| v.as_string());
             let history_session_id = fish_history_var
                 .as_ref()
-                .map(WString::as_utfstr)
+                .map(|v| v.as_utfstr())
                 .unwrap_or(DFLT_FISH_HISTORY_SESSION_ID);
             let vals = get_history_var_text(history_session_id);
             return Some(EnvVar::new_from_name_vec("history"L, vals));

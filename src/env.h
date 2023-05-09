@@ -43,8 +43,8 @@ struct event_list_ffi_t {
 
 struct owning_null_terminated_array_t;
 
-extern size_t read_byte_limit;
-extern bool curses_initialized;
+extern "C" size_t read_byte_limit;
+extern "C" bool curses_initialized;
 
 // Flags that may be passed as the 'mode' in env_stack_t::set() / environment_t::get().
 enum : uint16_t {

@@ -226,6 +226,15 @@ pub trait WExt {
         }
     }
 
+    /// Returns the index of the first match against the provided substring or `None`.
+    fn find(&self, search: impl AsRef<[char]>) -> Option<usize> {
+        fn inner(lhs: &[char], rhs: &[char]) -> Option<usize> {
+            lhs.windows(rhs.len()).position(|window| window == lhs)
+        }
+
+        inner(self.as_char_slice(), search.as_ref())
+    }
+
     /// \return the index of the first occurrence of the given char, or None.
     fn find_char(&self, c: char) -> Option<usize> {
         self.as_char_slice().iter().position(|&x| x == c)

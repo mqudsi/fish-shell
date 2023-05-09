@@ -50,10 +50,12 @@
 /// At init, we read all the environment variables from this array.
 extern char **environ;
 
+extern "C" {
 bool curses_initialized = false;
 
 /// Does the terminal have the "eat_newline_glitch".
 bool term_has_xn = false;
+}
 
 // static
 env_var_t env_var_t::new_ffi(EnvVar *ptr) {

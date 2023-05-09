@@ -5,6 +5,7 @@ use super::environment_impl::{
 use crate::abbrs::{abbrs_get_set, Abbreviation, Position};
 use crate::common::{unescape_string, UnescapeStringStyle};
 use crate::env::{EnvMode, EnvStackSetResult, EnvVar, Statuses};
+use crate::env_dispatch::env_dispatch_var_change;
 use crate::event::Event;
 use crate::ffi::{self, env_universal_t, universal_notifier_t};
 use crate::flog::FLOG;
@@ -34,8 +35,12 @@ lazy_static! {
 static UVARS_LOCALLY_MODIFIED: RelaxedAtomicBool = RelaxedAtomicBool::new(false);
 
 /// Convert an EnvVar to an FFI env_var_t.
-fn env_var_to_ffi(var: EnvVar) -> cxx::UniquePtr<ffi::env_var_t> {
-    ffi::env_var_t::new_ffi(Box::into_raw(Box::from(var)).cast()).within_unique_ptr()
+pub fn env_var_to_ffi(var: Option<EnvVar>) -> cxx::UniquePtr<ffi::env_var_t> {
+    if let Some(var) = var {
+        ffi::env_var_t::new_ffi(Box::into_raw(Box::from(var)).cast()).within_unique_ptr()
+    } else {
+        cxx::UniquePtr::null()
+    }
 }
 
 /// An environment is read-only access to variable values.
