@@ -1,3 +1,4 @@
+/*
 // Support for dispatching on environment changes.
 #include "config.h"  // IWYU pragma: keep
 
@@ -695,3 +696,5 @@ static void init_locale(const environment_t &vars) {
 
 /// Returns true if we think the terminal supports setting its title.
 bool term_supports_setting_title() { return can_set_term_title; }
+#endif
+*/

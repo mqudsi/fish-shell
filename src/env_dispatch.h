@@ -1,3 +1,4 @@
+#if 0
 // Prototypes for functions that react to environment variable changes
 #ifndef FISH_ENV_DISPATCH_H
 #define FISH_ENV_DISPATCH_H
@@ -19,4 +20,5 @@ void env_dispatch_var_change(const wcstring &key, env_stack_t &vars);
 /// TODO: pass in the variables directly.
 void env_dispatch_var_change_ffi(const wcstring &key /*, env_stack_t &vars */);
 
+#endif
 #endif

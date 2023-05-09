@@ -20,7 +20,7 @@
 
 #include "abbrs.h"
 #include "common.h"
-#include "env_dispatch.h"
+#include "env_dispatch.rs.h"
 #include "env_universal_common.h"
 #include "event.h"
 #include "fallback.h"  // IWYU pragma: keep
@@ -49,13 +49,6 @@
 
 /// At init, we read all the environment variables from this array.
 extern char **environ;
-
-extern "C" {
-bool curses_initialized = false;
-
-/// Does the terminal have the "eat_newline_glitch".
-bool term_has_xn = false;
-}
 
 // static
 env_var_t env_var_t::new_ffi(EnvVar *ptr) {
@@ -371,7 +364,7 @@ void env_init(const struct config_paths_t *paths, bool do_uvars, bool default_pa
     vars.set_one(FISH_BIND_MODE_VAR, ENV_GLOBAL, DEFAULT_BIND_MODE);
 
     // Allow changes to variables to produce events.
-    env_dispatch_init(vars);
+    env_dispatch_init_ffi(/* vars */);
 
     init_input();
 
@@ -577,6 +570,7 @@ wcstring env_get_runtime_path() {
 
 static std::mutex s_setenv_lock{};
 
+extern "C" {
 void setenv_lock(const char *name, const char *value, int overwrite) {
     scoped_lock locker(s_setenv_lock);
     setenv(name, value, overwrite);
@@ -585,6 +579,7 @@ void setenv_lock(const char *name, const char *value, int overwrite) {
 void unsetenv_lock(const char *name) {
     scoped_lock locker(s_setenv_lock);
     unsetenv(name);
+}
 }
 
 wcstring_list_ffi_t get_history_variable_text_ffi(const wcstring &fish_history_val) {

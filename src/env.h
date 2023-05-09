@@ -43,8 +43,14 @@ struct event_list_ffi_t {
 
 struct owning_null_terminated_array_t;
 
-extern "C" size_t read_byte_limit;
-extern "C" bool curses_initialized;
+extern "C" {
+extern bool CURSES_INITIALIZED;
+
+/// Does the terminal have the "eat_newline_glitch".
+extern bool TERM_HAS_XN;
+
+extern size_t READ_BYTE_LIMIT;
+}
 
 // Flags that may be passed as the 'mode' in env_stack_t::set() / environment_t::get().
 enum : uint16_t {
@@ -302,21 +308,16 @@ class env_stack_t final : public environment_t {
     rust::Box<EnvStackRef> impl_;
 };
 
-bool get_use_posix_spawn();
-
-extern bool term_has_xn;  // does the terminal have the "eat_newline_glitch"
-
-/// Returns true if we think the terminal supports setting its title.
-bool term_supports_setting_title();
-
 /// Gets a path appropriate for runtime storage
 wcstring env_get_runtime_path();
 
 /// A wrapper around setenv() and unsetenv() which use a lock.
 /// In general setenv() and getenv() are highly incompatible with threads. This makes it only
 /// slightly safer.
+extern "C" {
 void setenv_lock(const char *name, const char *value, int overwrite);
 void unsetenv_lock(const char *name);
+}
 
 /// Returns the originally inherited variables and their values.
 /// This is a simple key->value map and not e.g. cut into paths.
