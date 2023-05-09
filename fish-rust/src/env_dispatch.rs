@@ -1,4 +1,5 @@
 use crate::env::{setenv_lock, unsetenv_lock, EnvMode, EnvStack, Environment};
+use crate::env::{CURSES_INITIALIZED, DEFAULT_READ_BYTE_LIMIT, READ_BYTE_LIMIT, TERM_HAS_XN};
 use crate::ffi::is_interactive_session;
 use crate::flog::FLOGF;
 use crate::output::ColorSupport;
@@ -10,7 +11,6 @@ use crate::wutil::wgettext;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::env::{CURSES_INITIALIZED, TERM_HAS_XN, READ_BYTE_LIMIT, DEFAULT_READ_BYTE_LIMIT};
 
 #[cxx::bridge]
 mod env_dispatch_ffi {

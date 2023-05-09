@@ -6,8 +6,8 @@ pub mod var;
 pub use env_ffi::EnvStackSetResult;
 pub use environment::*;
 use std::ffi::CString;
-pub use var::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
+pub use var::*;
 
 /// Limit `read` to 100 MiB (bytes, not wide chars) by default. This can be overriden with the
 /// `fish_read_limit` variable.

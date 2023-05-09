@@ -22,7 +22,6 @@ include_cpp! {
     #include "common.h"
     #include "complete.h"
     #include "env.h"
-    #include "env_dispatch.h"
     #include "env_universal_common.h"
     #include "event.h"
     #include "fallback.h"
@@ -59,7 +58,6 @@ include_cpp! {
 
     generate_pod!("pipes_ffi_t")
     generate!("environment_t")
-    generate!("env_dispatch_var_change_ffi")
     generate!("env_stack_t")
     generate!("env_var_t")
     generate!("env_universal_t")
