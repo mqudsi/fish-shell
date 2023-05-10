@@ -11,12 +11,14 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::{ffi::CString, mem, os::fd::RawFd};
 
 /// Width of ambiguous characters. 1 is typical default.
+#[no_mangle]
 pub static FISH_AMBIGUOUS_WIDTH: AtomicI32 = AtomicI32::new(1);
 
 /// Width of emoji characters.
 ///
 /// 1 is the typical emoji width in Unicode 8.
 // For some reason, this is declared here and exposed here, but is set in `env_dispatch`.
+#[no_mangle]
 pub static FISH_EMOJI_WIDTH: AtomicI32 = AtomicI32::new(1);
 
 /// Width of emoji characters.
