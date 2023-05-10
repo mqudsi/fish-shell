@@ -1,5 +1,6 @@
+use crate::curses::{self, Term};
 use crate::env::{setenv_lock, unsetenv_lock, EnvMode, EnvStack, Environment};
-use crate::env::{CURSES_INITIALIZED, DEFAULT_READ_BYTE_LIMIT, READ_BYTE_LIMIT, TERM_HAS_XN};
+use crate::env::{CURSES_INITIALIZED, DEFAULT_READ_BYTE_LIMIT, READ_BYTE_LIMIT, TERM, TERM_HAS_XN};
 use crate::ffi::is_interactive_session;
 use crate::flog::FLOGF;
 use crate::output::ColorSupport;
@@ -15,7 +16,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[cxx::bridge]
 mod env_dispatch_ffi {
     extern "Rust" {
-        fn env_cleanup();
         fn env_dispatch_init_ffi();
         fn term_supports_setting_title() -> bool;
         fn use_posix_spawn() -> bool;
@@ -36,28 +36,6 @@ const LOCALE_VARIABLES: &[&wstr] = &[
 const CURSES_VARIABLES: &[&wstr] = &[
     L!("TERM"), L!("TERMINFO"), L!("TERMINFO_DIRS")
 ];
-
-mod ncurses_ffi {
-    pub const OK: i32 = 0;
-    pub const ERR: i32 = -1;
-
-    extern "C" {
-        /// The ncurses `cur_term` TERMINAL pointer.
-        pub static mut cur_term: *const core::ffi::c_void;
-
-        /// setupterm(3) is a low-level call to begin doing any sort of `term.h`/`curses.h` work.
-        /// It's called internally by ncurses's `initscr()` and `newterm()`, but the C++ code called
-        /// it directly from [`initialize_curses_using_fallbacks()`].
-        pub fn setupterm(
-            term: *const libc::c_char,
-            filedes: libc::c_int,
-            errret: *mut libc::c_int,
-        ) -> libc::c_int;
-
-        /// Frees the `cur_term` TERMINAL  pointer.
-        pub fn del_curterm(term: *const core::ffi::c_void);
-    }
-}
 
 /// Whether to use `posix_spawn()` when possible.
 static USE_POSIX_SPAWN: AtomicBool = AtomicBool::new(false);
@@ -385,7 +363,7 @@ fn update_fish_color_support(vars: &dyn Environment) {
             supports_256color
         );
     } else if term.find(L!("256color")).is_some() {
-        // TERM containts "256color": 256 colors explicitly supported.
+        // TERM contains "256color": 256 colors explicitly supported.
         supports_256color = true;
         FLOGF!(term_support, "256 color support enabled for TERM=", term);
     } else if term.find(L!("xterm")).is_some() {
@@ -499,9 +477,6 @@ fn update_fish_color_support(vars: &dyn Environment) {
 /// `$TERM` to our fallback. We're only doing this in the hope of getting a functional shell.
 /// If we launch an external command that uses `$TERM`, it should get the same value we were given,
 /// if any.
-///
-/// It's not exposed by any of the ncurses wrapping crates and unlike some of the ncurses header
-/// values, its definition is universal for all implementations so we can stub it here easily.
 fn initialize_curses_using_fallbacks(vars: &dyn Environment) {
     // xterm-256color is the most used terminal type by a massive margin, especially counting
     // terminals that are mostly compatbile.
@@ -512,23 +487,24 @@ fn initialize_curses_using_fallbacks(vars: &dyn Environment) {
         .map(|v| v.as_string().to_string())
         .unwrap_or(String::new());
 
-    for fallback in FALLBACKS {
+    for term in FALLBACKS {
         // If $TERM is already set to the fallback name we're about to use, there's no point in
         // seeing if the fallback name can be used.
-        if termstr == fallback {
+        if termstr == term {
             continue;
         }
 
-        let term = CString::new(fallback).unwrap();
         let mut _err = 0_i32;
-        let success =
-            unsafe { ncurses_ffi::setupterm(term.as_ptr(), libc::STDOUT_FILENO, &mut _err) }
-                == ncurses_ffi::OK;
+        let success = match Term::setup(Some(term), libc::STDOUT_FILENO) {
+            Some(term) => {
+                *TERM.lock().expect("Mutex poiosoned!") = Some(term);
+                true
+            }
+            None => false,
+        };
 
         if is_interactive_session() {
-            let term = term.to_string_lossy();
             if success {
-                // TODO: Warning is supposed to be localized.
                 FLOGF!(warning, wgettext!("Using fallback terminal type: "), term);
             } else {
                 FLOGF!(
@@ -538,6 +514,7 @@ fn initialize_curses_using_fallbacks(vars: &dyn Environment) {
                 );
             }
         }
+
         if success {
             break;
         }
@@ -555,11 +532,11 @@ fn apply_term_hacks(vars: &dyn Environment) {
 
     // Be careful, variables like `enter_italics_mode` are #defined to dereference through
     // `cur_term`.
-    if unsafe { ncurses_ffi::cur_term.is_null() } {
+    if !Term::is_initialized() {
         return;
     }
 
-    // #[cfg(target_os = "macos")]
+    #[cfg(target_os = "macos")]
     {
         // Hack in missing italics and dim capabilities omitted from macOS xterm-256color terminfo.
         // Helps Terminal.app and iTerm.
@@ -569,30 +546,33 @@ fn apply_term_hacks(vars: &dyn Environment) {
             .unwrap_or(WString::new());
         if term_prog == L!("Apple_Terminal") || term_prog == L!("iTerm.app") {
             if let Some(term) = vars.get(L!("TERM")).map(|v| v.as_string()) {
-                // Database::from_env() is OK if we have a $TERM.
-                let tinfo = terminfo::Database::from_env().unwrap();
                 if term == L!("xterm-256color") {
                     const SITM_ESC: &str = "\x1B[3m";
                     const RITM_ESC: &str = "\x1B[23m";
                     const DIM_ESC: &str = "\x1B[2m";
 
-                    // TODO: The ability to overwrite a capability in the terminfo structs
-                    // is private in the terminfo crate. We'll have to fork it.
+                    let mut term = TERM.lock().expect("Mutex poisoned!");
+                    let term = term.as_mut().unwrap();
 
-                    if tinfo
-                        .get::<terminfo::capability::EnterItalicsMode>()
+                    if term
+                        .strings
+                        .get(curses::Strings::ENTER_ITALICS_MODE)
                         .is_none()
                     {
-                        // enter_italics_mode = SITM_ESC;
+                        term.strings
+                            .set(curses::Strings::ENTER_ITALICS_MODE, SITM_ESC.to_string());
                     }
-                    if tinfo
-                        .get::<terminfo::capability::ExitItalicsMode>()
+                    if term
+                        .strings
+                        .get(curses::Strings::EXIT_ITALICS_MODE)
                         .is_none()
                     {
-                        // exit_italics_mode = RITM_ESC;
+                        term.strings
+                            .set(curses::Strings::EXIT_ITALICS_MODE, RITM_ESC.to_string());
                     }
-                    if tinfo.get::<terminfo::capability::EnterDimMode>().is_none() {
-                        // enter_dim_mode = DIM_ESC;
+                    if term.strings.get(curses::Strings::ENTER_DIM_MODE).is_none() {
+                        term.strings
+                            .set(curses::Strings::ENTER_DIM_MODE, DIM_ESC.to_string());
                     }
                 }
             }
@@ -651,15 +631,6 @@ fn does_term_support_setting_title(vars: &dyn Environment) -> bool {
     true
 }
 
-pub fn env_cleanup() {
-    unsafe {
-        if !ncurses_ffi::cur_term.is_null() {
-            ncurses_ffi::del_curterm(ncurses_ffi::cur_term);
-            ncurses_ffi::cur_term = core::ptr::null();
-        }
-    }
-}
-
 // Initialize the curses subsystem
 fn init_curses(vars: &dyn Environment) {
     for var in CURSES_VARIABLES {
@@ -674,15 +645,9 @@ fn init_curses(vars: &dyn Environment) {
         }
     }
 
-    // init_curses() is called more than once, which can lead to a memory leak if the previous
-    // ncurses TERMINAL isn't freed before initializing it again with the call to `setupterm()`.
-    env_cleanup();
-
-    let mut err_ret = 0;
-    if unsafe {
-        ncurses_ffi::setupterm(core::ptr::null(), libc::STDOUT_FILENO, &mut err_ret)
-            == ncurses_ffi::ERR
-    } {
+    if let Some(term) = crate::curses::Term::setup(None, libc::STDOUT_FILENO) {
+        *TERM.lock().expect("Mutex poisoned!") = Some(term);
+    } else {
         if is_interactive_session() {
             let term = vars.get_unless_empty(L!("TERM")).map(|v| v.as_string());
             FLOGF!(warning, wgettext!("Could not set up terminal."));
@@ -708,13 +673,14 @@ fn init_curses(vars: &dyn Environment) {
 
     CAN_SET_TERM_TITLE.store(does_term_support_setting_title(vars), Ordering::Relaxed);
 
-    // Database::from_env() works only if $TERM is set, which we don't guarantee in this branch.
-    if let Ok(tinfo) = terminfo::Database::from_env() {
-        // Does the terminal have the eat_newline_glitch?
-        let xn = tinfo
-            .get::<terminfo::capability::EatNewlineGlitch>()
-            .map(|xn| xn.into())
-            .unwrap_or(false);
+    // Check if the terminal has the eat_newline_glitch termcap flag/capability
+    //
+    // This was always implicitly conditional on curses being initialized - it's just that xn would
+    // come back as false if `cur_term` were null in the C++ version of the code.
+    if Term::is_initialized() {
+        let term = TERM.lock().expect("Mutex poisoned!");
+        let term = term.as_ref().unwrap();
+        let xn = term.flags.get(curses::Flags::EAT_NEWLINE_GLITCH);
         TERM_HAS_XN.store(xn, Ordering::Relaxed);
     }
 

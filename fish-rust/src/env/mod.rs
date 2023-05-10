@@ -3,11 +3,16 @@ pub mod environment;
 mod environment_impl;
 pub mod var;
 
+use crate::curses::Term;
 pub use env_ffi::EnvStackSetResult;
 pub use environment::*;
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::Mutex;
 pub use var::*;
+
+/// A safe wrapper around the initialized (n)curses terminal.
+pub static TERM: Mutex<Option<Term>> = Mutex::new(None);
 
 /// Limit `read` to 100 MiB (bytes, not wide chars) by default. This can be overriden with the
 /// `fish_read_limit` variable.

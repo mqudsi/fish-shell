@@ -327,10 +327,7 @@ pub fn asan_before_exit() {
     if !is_forked_child() {
         unsafe {
             // Free ncurses terminal state
-            extern "C" {
-                fn env_cleanup();
-            }
-            env_cleanup();
+            crate::curses::Term::reset();
         }
     }
 }
