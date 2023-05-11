@@ -5,10 +5,11 @@
 //! only made available via the the ncurses headers to C code via macro magic, such as polyfilling
 //! missing capability strings to shoe-in missing support for certain terminal sequences.
 //!
-//! This is intentionally very bare bones; functionality that we don't need to intercept to provide
-//! missing ncurses features is exposed directly to the module's callers via unsafe ffi functions.
+//! This is intentionally very bare bones and only implements the subset of curses functionality
+//! used by fish
 
-use self::ffi::*;
+use self::sys::*;
+use crate::common::Projection;
 use std::ffi::CString;
 use std::sync::Mutex;
 
@@ -17,56 +18,24 @@ pub static mut TERM: Mutex<Option<Term>> = Mutex::new(None);
 /// Returns a mutable reference to the global [`Term`] singleton. Locks if another thread has an
 /// outstanding reference.
 ///
-/// Panics if [`setup()`](self::setup()) hasn't been called successfully.
+/// Panics on deref if [`setup()`](self::setup()) hasn't been called successfully.
 pub fn term() -> impl std::ops::DerefMut<Target = Term> {
     unsafe {
         let guard = TERM.lock().expect("Mutex poisoned!");
 
-        Projection {
-            value: guard,
-            view: |guard| guard.as_ref().expect("TERM hasn't been initialized!"),
-            view_mut: |guard| guard.as_mut().expect("TERM hasn't been initialized!"),
-        }
-    }
-}
-
-/// Hack to work around the lack of MutexGuard::map() to project a field.
-struct Projection<T, V, F1, F2>
-where
-    F1: Fn(&T) -> &V,
-    F2: Fn(&mut T) -> &mut V,
-{
-    value: T,
-    view: F1,
-    view_mut: F2,
-}
-
-impl<T, V, F1, F2> std::ops::Deref for Projection<T, V, F1, F2>
-where
-    F1: Fn(&T) -> &V,
-    F2: Fn(&mut T) -> &mut V,
-{
-    type Target = V;
-
-    fn deref(&self) -> &Self::Target {
-        (self.view)(&self.value)
-    }
-}
-
-impl<T, V, F1, F2> std::ops::DerefMut for Projection<T, V, F1, F2>
-where
-    F1: Fn(&T) -> &V,
-    F2: Fn(&mut T) -> &mut V,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        (self.view_mut)(&mut self.value)
+        Projection::new(
+            guard,
+            |guard| guard.as_ref().expect("TERM hasn't been initialized!"),
+            |guard| guard.as_mut().expect("TERM hasn't been initialized!"),
+        )
     }
 }
 
 const OK: i32 = 0;
 const ERR: i32 = -1;
 
-mod ffi {
+/// Private module exposing system curses ffi.
+mod sys {
     extern "C" {
         /// The ncurses `cur_term` TERMINAL pointer.
         pub static mut cur_term: *const core::ffi::c_void;
@@ -102,6 +71,9 @@ mod ffi {
 pub const ENTER_ITALICS_MODE: StringCap = StringCap::new("ZH");
 pub const EXIT_ITALICS_MODE: StringCap = StringCap::new("ZR");
 pub const ENTER_DIM_MODE: StringCap = StringCap::new("mh");
+
+// Number capabilities
+pub const MAX_COLORS: Number = Number::new("Co");
 
 // Flag capabilities
 pub const EAT_NEWLINE_GLITCH: Flag = Flag::new("xn");
@@ -156,7 +128,7 @@ impl<'a> Capability<'a> for StringCap {
                 unsafe {
                     let mut area = result.as_mut_ptr() as *mut libc::c_char;
                     let area = std::ptr::addr_of_mut!(area);
-                    if ffi::tgetstr(id.as_ptr(), area).is_null() {
+                    if sys::tgetstr(id.as_ptr(), area).is_null() {
                         return None;
                     }
                 }
@@ -204,9 +176,9 @@ pub fn setup(term: Option<&str>, fd: i32) -> bool {
             let mut err = 0;
             if let Some(term) = term {
                 let term = CString::new(term).unwrap();
-                ffi::setupterm(term.as_ptr(), fd, &mut err)
+                sys::setupterm(term.as_ptr(), fd, &mut err)
             } else {
-                ffi::setupterm(core::ptr::null(), fd, &mut err)
+                sys::setupterm(core::ptr::null(), fd, &mut err)
             }
         };
 
@@ -222,14 +194,14 @@ pub fn setup(term: Option<&str>, fd: i32) -> bool {
 
 /// Whether or not the curses library has been initialized.
 pub fn is_initialized() -> bool {
-    unsafe { !ffi::cur_term.is_null() }
+    unsafe { !sys::cur_term.is_null() }
 }
 
 /// Resets the curses `cur_term` TERMINAL pointer. Any previous term objects are invalidated!
 pub unsafe fn reset() {
     if is_initialized() {
-        ffi::del_curterm(cur_term);
-        ffi::cur_term = core::ptr::null();
+        sys::del_curterm(cur_term);
+        sys::cur_term = core::ptr::null();
     }
 }
 
@@ -242,6 +214,9 @@ struct Code {
 impl Code {
     const fn new(code: &str) -> Code {
         let code = code.as_bytes();
+        if code.len() != 2 {
+            panic!("Invalid termcap code provided!");
+        }
         Code {
             code: [code[0], code[1], b'\0'],
         }
@@ -293,7 +268,7 @@ pub struct Flags {}
 impl Flags {
     /// Queries the termcap/terminfo database for the presence of a Capability.
     pub fn get(&self, id: Flag) -> bool {
-        unsafe { ffi::tgetflag(id.0.as_ptr()) }
+        unsafe { sys::tgetflag(id.0.as_ptr()) }
     }
 }
 

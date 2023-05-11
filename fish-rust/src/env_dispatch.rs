@@ -161,8 +161,8 @@ fn guess_emoji_width(vars: &dyn Environment) {
     use crate::fallback::FISH_EMOJI_WIDTH;
 
     if let Some(width_str) = vars.get(L!("fish_emoji_width")) {
-        // The C++ code just ignored the result of wcstol, which returned 0 in case of error.
-        let new_width = fish_wcstoi(width_str.as_string().chars()).unwrap_or(0);
+        // The only valid values are 1 or 2; we default to 1 if it was an invalid int.
+        let new_width = fish_wcstoi(width_str.as_string().chars()).unwrap_or(1);
         let new_width = new_width.min(2).max(1);
         FISH_EMOJI_WIDTH.store(new_width, Ordering::Relaxed);
         return;
@@ -214,7 +214,7 @@ fn handle_change_ambiguous_width(vars: &dyn Environment) {
         .get(L!("fish_ambiguous_width"))
         .as_ref()
         .map(|v| v.as_string())
-        // C++ code disregarded fish_wcstol() return of 0, so we'll unwrap to the same.
+        // The only valid values are 1 or 2; we default to 1 if it was an invalid int.
         .map(|fish_ambiguous_width| fish_wcstoi(fish_ambiguous_width.chars()).unwrap_or(0))
         .unwrap_or(1)
         .max(0);
@@ -272,7 +272,7 @@ fn handle_tz_change(var_name: &wstr, vars: &dyn Environment) {
 
 fn handle_locale_change(vars: &dyn Environment) {
     init_locale(vars);
-    // We need to re-guess emoji width because the locale might have change to a multibyte one.
+    // We need to re-guess emoji width because the locale might have changed to a multibyte one.
     guess_emoji_width(vars);
 }
 
@@ -342,11 +342,7 @@ fn run_inits(vars: &dyn Environment) {
 
 /// Updates our idea of whether we support term256 and term24bit (see issue #10222).
 fn update_fish_color_support(vars: &dyn Environment) {
-    let tinfo = terminfo::Database::from_env();
-    let max_colors: Option<i32> = tinfo
-        .ok()
-        .and_then(|tinfo| tinfo.get::<terminfo::capability::MaxColors>())
-        .map(|mc| mc.into());
+    let max_colors = curses::term().get(curses::MAX_COLORS);
 
     // Detect or infer term256 support. If fish_term256 is set, we respect it. Otherwise, infer it
     // from $TERM or use terminfo.
@@ -483,7 +479,7 @@ fn update_fish_color_support(vars: &dyn Environment) {
 /// if any.
 fn initialize_curses_using_fallbacks(vars: &dyn Environment) {
     // xterm-256color is the most used terminal type by a massive margin, especially counting
-    // terminals that are mostly compatbile.
+    // terminals that are mostly compatible.
     const FALLBACKS: [&str; 4] = ["xterm-256color", "xterm", "ansi", "dumb"];
 
     let termstr = vars
@@ -640,7 +636,7 @@ fn init_curses(vars: &dyn Environment) {
                 );
                 FLOGF!(
                     warning,
-                    wgettext!("Check that this terminaly type is supported on this system.")
+                    wgettext!("Check that this terminal type is supported on this system.")
                 );
             } else {
                 FLOGF!(warning, wgettext!("TERM environment variable not set."));
