@@ -163,7 +163,7 @@ fn guess_emoji_width(vars: &dyn Environment) {
     if let Some(width_str) = vars.get(L!("fish_emoji_width")) {
         // The only valid values are 1 or 2; we default to 1 if it was an invalid int.
         let new_width = fish_wcstoi(width_str.as_string().chars()).unwrap_or(1);
-        let new_width = new_width.min(2).max(1);
+        let new_width = new_width.clamp(1, 2);
         FISH_EMOJI_WIDTH.store(new_width, Ordering::Relaxed);
         return;
     }
@@ -192,7 +192,7 @@ fn guess_emoji_width(vars: &dyn Environment) {
         _ => {
             // Default to whatever the system's wcwidth gives for U+1F603, but only if it's at least
             // 1 and at most 2.
-            let width = crate::fallback::wcwidth('😃').min(2).max(1);
+            let width = crate::fallback::wcwidth('😃').clamp(1, 2);
             FISH_EMOJI_WIDTH.store(width, Ordering::Relaxed);
             FLOGF!(term_support, "default emoji width: ", width);
         }
@@ -217,7 +217,7 @@ fn handle_change_ambiguous_width(vars: &dyn Environment) {
         // The only valid values are 1 or 2; we default to 1 if it was an invalid int.
         .map(|fish_ambiguous_width| fish_wcstoi(fish_ambiguous_width.chars()).unwrap_or(0))
         .unwrap_or(1)
-        .max(0);
+        .clamp(1, 2);
     crate::fallback::FISH_AMBIGUOUS_WIDTH.store(new_width, Ordering::Relaxed);
 }
 

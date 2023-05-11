@@ -20,16 +20,16 @@ pub static FISH_AMBIGUOUS_WIDTH: AtomicI32 = AtomicI32::new(1);
 ///
 /// See issues like #4539 and https://github.com/neovim/issues/4976 for how painful this is.
 ///
-/// Valid values are 0, 1, and 2. 1 is the typical emoji width used in Unicode 8, and 0 means to use
-/// the guessed value.
+/// Valid values are 1, and 2. 1 is the typical emoji width used in Unicode 8 while some newer
+/// terminals use a width of 2 since Unicode 9.
 // For some reason, this is declared here and exposed here, but is set in `env_dispatch`.
 #[no_mangle]
 pub static FISH_EMOJI_WIDTH: AtomicI32 = AtomicI32::new(1);
 
 /// Width of emoji characters.
 ///
-/// Valid values are 0, 1, and 2. 1 is the typical emoji width used in Unicode 8, and 0 means to use
-/// the guessed value.
+/// Valid values are 1, and 2. 1 is the typical emoji width used in Unicode 8 while some newer
+/// terminals use a width of 2 since Unicode 9.
 fn fish_get_emoji_width() -> i32 {
     FISH_EMOJI_WIDTH.load(Ordering::Relaxed)
 }
