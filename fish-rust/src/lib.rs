@@ -57,6 +57,7 @@ mod reader;
 mod redirection;
 mod signal;
 mod smoke;
+mod supercow;
 mod termsize;
 mod threads;
 mod timer;

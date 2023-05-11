@@ -543,7 +543,7 @@ fn apply_term_hacks(vars: &dyn Environment) {
                     const RITM_ESC: &str = "\x1B[23m";
                     const DIM_ESC: &str = "\x1B[2m";
 
-                    let mut term = curses::term();
+                    let term = curses::term();
                     if term.get(curses::ENTER_ITALICS_MODE).is_none() {
                         term.set(curses::ENTER_ITALICS_MODE, SITM_ESC.to_string());
                     }
@@ -655,7 +655,7 @@ fn init_curses(vars: &dyn Environment) {
     // This was always implicitly conditional on curses being initialized - it's just that xn would
     // come back as false if `cur_term` were null in the C++ version of the code.
     if curses::is_initialized() {
-        let mut term = curses::term();
+        let term = curses::term();
         let xn = term.get(curses::EAT_NEWLINE_GLITCH);
         TERM_HAS_XN.store(xn, Ordering::Relaxed);
     }

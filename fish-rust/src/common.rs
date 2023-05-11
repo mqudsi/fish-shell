@@ -2022,7 +2022,7 @@ where
     }
 }
 
-impl<T, V, F1, F2> std::ops::Deref for Projection<T, V, F1, F2>
+impl<T, V, F1, F2> Deref for Projection<T, V, F1, F2>
 where
     F1: Fn(&T) -> &V,
     F2: Fn(&mut T) -> &mut V,
@@ -2034,7 +2034,7 @@ where
     }
 }
 
-impl<T, V, F1, F2> std::ops::DerefMut for Projection<T, V, F1, F2>
+impl<T, V, F1, F2> DerefMut for Projection<T, V, F1, F2>
 where
     F1: Fn(&T) -> &V,
     F2: Fn(&mut T) -> &mut V,

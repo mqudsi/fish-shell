@@ -9,31 +9,28 @@
 //! used by fish
 
 use self::sys::*;
-use crate::common::Projection;
-use std::ffi::CString;
-use std::sync::Mutex;
+use crate::supercow::ArcCow;
+use once_cell::sync::Lazy;
+use std::ffi::{CStr, CString};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
-pub static TERM: Mutex<Option<Term>> = Mutex::new(None);
+// This is `static mut` because a `Lazy` can only be init once but we may need to re-init the Term
+// value after a second+ call to curses::setup() in response to environment changes.
+pub static mut TERM: Lazy<Term> = Lazy::new(|| panic!("TERM not yet initialized!"));
 
-/// Returns a mutable reference to the global [`Term`] singleton. Locks if another thread has an
-/// outstanding reference.
+/// Returns a mutable reference to the global [`Term`] singleton.
 ///
-/// Panics on deref if [`setup()`](self::setup()) hasn't been called successfully.
-pub fn term() -> impl std::ops::DerefMut<Target = Term> {
-    let guard = TERM.lock().expect("Mutex poisoned!");
-
-    Projection::new(
-        guard,
-        |guard| guard.as_ref().expect("TERM hasn't been initialized!"),
-        |guard| guard.as_mut().expect("TERM hasn't been initialized!"),
-    )
+/// Panics on deref if [`curses::setup()`](self::setup()) hasn't been called successfully.
+pub fn term() -> &'static Term {
+    unsafe { &*TERM }
 }
-
-const OK: i32 = 0;
-const ERR: i32 = -1;
 
 /// Private module exposing system curses ffi.
 mod sys {
+    pub const OK: i32 = 0;
+    pub const ERR: i32 = -1;
+
     extern "C" {
         /// The ncurses `cur_term` TERMINAL pointer.
         pub static mut cur_term: *const core::ffi::c_void;
@@ -61,7 +58,7 @@ mod sys {
         pub fn tgetstr(
             id: *const libc::c_char,
             area: *mut *mut libc::c_char,
-        ) -> *const core::ffi::c_void;
+        ) -> *const libc::c_char;
     }
 }
 
@@ -77,71 +74,76 @@ pub const MAX_COLORS: Number = Number::new("Co");
 pub const EAT_NEWLINE_GLITCH: Flag = Flag::new("xn");
 
 pub struct Term {
-    overrides: Vec<(StringCap, String)>,
+    has_overrides: AtomicBool,
+    overrides: Mutex<Vec<(StringCap, Arc<CString>)>>,
 }
 
 impl Term {
     /// Internal constructor function. Like `Default` but only usable from within the module.
     fn new() -> Self {
         Term {
-            overrides: Vec::new(),
+            has_overrides: AtomicBool::new(false),
+            overrides: Mutex::new(Vec::new()),
         }
     }
 
     /// Looks up support for [`Capability`] `capability` in the termcap/terminfo database via the
     /// curses library.
-    pub fn get<'a, C: Capability<'a>>(&'a mut self, capability: C) -> C::Result {
+    pub fn get<'a, C: Capability<'a>>(&'a self, capability: C) -> C::Result {
         capability.lookup(self)
     }
 
     /// Overrides the string value of `capability` for the current terminal.
-    pub fn set(&mut self, id: StringCap, value: String) {
-        match self.overrides.binary_search_by(|entry| entry.0.cmp(&id)) {
-            Ok(idx) => self.overrides[idx] = (id, value),
-            Err(idx) => self.overrides.insert(idx, (id, value)),
+    pub fn set(&self, id: StringCap, value: &str) {
+        let value = CString::new(value).unwrap().into();
+        let mut overrides = self.overrides.lock().expect("Mutex poisoned!");
+        match overrides.binary_search_by(|entry| entry.0.cmp(&id)) {
+            Ok(idx) => overrides[idx] = (id, value),
+            Err(idx) => overrides.insert(idx, (id, value)),
         }
+        self.has_overrides.store(true, Ordering::Relaxed);
     }
-}
-
-enum Value<'a> {
-    String(&'a str),
-    Bool(bool),
-    Number(i32),
 }
 
 pub trait Capability<'a> {
     type Result: Sized + 'a;
-    fn lookup(&self, term: &'a mut Term) -> Self::Result;
+    fn lookup(&self, term: &'a Term) -> Self::Result;
+}
+
+impl StringCap {
+    fn sys_lookup<'a>(&self) -> Option<ArcCow<'a, CStr, CString>> {
+        let result = unsafe {
+            const NULL: *const i8 = core::ptr::null();
+            match sys::tgetstr(self.0.as_ptr(), core::ptr::null_mut()) {
+                NULL => return None,
+                // termcap spec says nul is not allowed in terminal sequences and must be encoded,
+                // so we can safely unwrap here.
+                result => CStr::from_ptr(result),
+            }
+        };
+        Some(ArcCow::Borrowed(result))
+    }
 }
 
 impl<'a> Capability<'a> for StringCap {
-    type Result = Option<&'a str>;
+    type Result = Option<ArcCow<'a, CStr, CString>>;
 
-    fn lookup(&self, term: &'a mut Term) -> Self::Result {
-        let id = self.0;
-        match term.overrides.binary_search_by(|entry| entry.0.cmp(self)) {
-            Ok(idx) => Some(&term.overrides[idx].1),
-            Err(idx) => {
-                let mut result = vec![b'\0'; 100];
-                unsafe {
-                    let mut area = result.as_mut_ptr() as *mut libc::c_char;
-                    let area = std::ptr::addr_of_mut!(area);
-                    if sys::tgetstr(id.as_ptr(), area).is_null() {
-                        return None;
-                    }
-                }
-                term.overrides
-                    .insert(idx, (*self, String::from_utf8(result).unwrap()));
-                Some(&term.overrides[idx].1)
+    fn lookup(&self, term: &'a Term) -> Self::Result {
+        if term.has_overrides.load(Ordering::Relaxed) {
+            let overrides = term.overrides.lock().expect("Mutex poisoned!");
+            if let Ok(idx) = overrides.binary_search_by(|entry| entry.0.cmp(self)) {
+                return Some(ArcCow::Shared(Arc::clone(&overrides[idx].1)));
             }
         }
+
+        self.sys_lookup()
     }
 }
 
 impl<'a> Capability<'a> for Number {
     type Result = Option<i32>;
 
-    fn lookup(&self, _: &'a mut Term) -> Self::Result {
+    fn lookup(&self, _: &'a Term) -> Self::Result {
         unsafe {
             match tgetnum(self.0.as_ptr()) {
                 -1 => None,
@@ -154,7 +156,7 @@ impl<'a> Capability<'a> for Number {
 impl<'a> Capability<'a> for Flag {
     type Result = bool;
 
-    fn lookup(&self, _: &'a mut Term) -> Self::Result {
+    fn lookup(&self, _: &'a Term) -> Self::Result {
         unsafe { tgetflag(self.0.as_ptr()) }
     }
 }
@@ -164,6 +166,8 @@ impl<'a> Capability<'a> for Flag {
 ///
 /// Note that the `errret` parameter is provided to the function, meaning curses will not write
 /// error output to stderr in case of failure.
+///
+/// Any existing references from `curses::term()` will be invalidated by this call!
 pub fn setup(term: Option<&str>, fd: i32) -> bool {
     let result = unsafe {
         // If cur_term is already initialized for a different $TERM value, calling setupterm() again
@@ -179,12 +183,14 @@ pub fn setup(term: Option<&str>, fd: i32) -> bool {
         }
     };
 
-    if result == self::OK {
-        *TERM.lock().expect("Mutex poisoned!") = Some(Term::new());
-        true
-    } else {
-        *TERM.lock().expect("Mutex poisoned!") = None;
-        false
+    unsafe {
+        if result == sys::OK {
+            TERM = Lazy::new(|| Term::new());
+            true
+        } else {
+            TERM = Lazy::new(|| panic!("TERM has not yet been initialized!"));
+            false
+        }
     }
 }
 
@@ -208,6 +214,12 @@ struct Code {
 }
 
 impl Code {
+    /// `code` is the two-digit termcap code. See termcap(5) for a reference.
+    ///
+    /// Panics if anything other than a two-ascii-character `code` is passed into the function. It
+    /// would take a hard-coded `[u8; 2]` parameter but that is less ergonomic. Since all our
+    /// termcap `Code`s are compile-time constants, the panic is a compile-time error, meaning
+    /// there's no harm to going this more ergonomic route.
     const fn new(code: &str) -> Code {
         let code = code.as_bytes();
         if code.len() != 2 {
@@ -247,29 +259,3 @@ impl Flag {
         Flag(Code::new(code))
     }
 }
-
-/// Capabilities representing strings. Only the ones we use are included.
-#[derive(Default)]
-pub struct Strings {
-    /// The term strings the caller has overridden.
-    values: Vec<(StringCap, String)>,
-}
-
-impl Strings {}
-
-/// Capabilities representing flags. Only the ones we use are included.
-#[derive(Default)]
-pub struct Flags {}
-
-impl Flags {
-    /// Queries the termcap/terminfo database for the presence of a Capability.
-    pub fn get(&self, id: Flag) -> bool {
-        unsafe { sys::tgetflag(id.0.as_ptr()) }
-    }
-}
-
-/// Capabilities representing numbers. Only the ones we use are included.
-#[derive(Default)]
-pub struct Numbers {}
-
-impl Numbers {}
