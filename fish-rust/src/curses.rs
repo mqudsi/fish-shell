@@ -23,7 +23,7 @@ pub static mut TERM: Lazy<Term> = Lazy::new(|| panic!("TERM not yet initialized!
 ///
 /// Panics on deref if [`curses::setup()`](self::setup()) hasn't been called successfully.
 pub fn term() -> &'static Term {
-    unsafe { &*TERM }
+    unsafe { &TERM }
 }
 
 /// Private module exposing system curses ffi.
@@ -185,7 +185,7 @@ pub fn setup(term: Option<&str>, fd: i32) -> bool {
 
     unsafe {
         if result == sys::OK {
-            TERM = Lazy::new(|| Term::new());
+            TERM = Lazy::new(Term::new);
             true
         } else {
             TERM = Lazy::new(|| panic!("TERM has not yet been initialized!"));

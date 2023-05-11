@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'a, 'b, T: ?Sized, S> PartialOrd for SuperCow<'a, T, S>
+impl<'a, T: ?Sized, S> PartialOrd for SuperCow<'a, T, S>
 where
     T: ToOwned + PartialOrd,
     S: Deref<Target = T::Owned>,
@@ -72,7 +72,7 @@ where
     }
 }
 
-impl<'a, 'b, T: ?Sized, S> Ord for SuperCow<'a, T, S>
+impl<'a, T: ?Sized, S> Ord for SuperCow<'a, T, S>
 where
     T: ToOwned + Ord,
     S: Deref<Target = T::Owned>,
@@ -96,7 +96,7 @@ where
     }
 }
 
-impl<'a, 'b, T: ?Sized, S> Eq for SuperCow<'a, T, S>
+impl<'a, T: ?Sized, S> Eq for SuperCow<'a, T, S>
 where
     T: ToOwned + Eq,
     S: Deref<Target = T::Owned>,
