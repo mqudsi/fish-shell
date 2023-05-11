@@ -545,13 +545,13 @@ fn apply_term_hacks(vars: &dyn Environment) {
 
                     let term = curses::term();
                     if term.get(curses::ENTER_ITALICS_MODE).is_none() {
-                        term.set(curses::ENTER_ITALICS_MODE, SITM_ESC.to_string());
+                        term.set(curses::ENTER_ITALICS_MODE, SITM_ESC);
                     }
                     if term.get(curses::EXIT_ITALICS_MODE).is_none() {
-                        term.set(curses::EXIT_ITALICS_MODE, RITM_ESC.to_string());
+                        term.set(curses::EXIT_ITALICS_MODE, RITM_ESC);
                     }
                     if term.get(curses::ENTER_DIM_MODE).is_none() {
-                        term.set(curses::ENTER_DIM_MODE, DIM_ESC.to_string());
+                        term.set(curses::ENTER_DIM_MODE, DIM_ESC);
                     }
                 }
             }
