@@ -13,22 +13,20 @@ use crate::common::Projection;
 use std::ffi::CString;
 use std::sync::Mutex;
 
-pub static mut TERM: Mutex<Option<Term>> = Mutex::new(None);
+pub static TERM: Mutex<Option<Term>> = Mutex::new(None);
 
 /// Returns a mutable reference to the global [`Term`] singleton. Locks if another thread has an
 /// outstanding reference.
 ///
 /// Panics on deref if [`setup()`](self::setup()) hasn't been called successfully.
 pub fn term() -> impl std::ops::DerefMut<Target = Term> {
-    unsafe {
-        let guard = TERM.lock().expect("Mutex poisoned!");
+    let guard = TERM.lock().expect("Mutex poisoned!");
 
-        Projection::new(
-            guard,
-            |guard| guard.as_ref().expect("TERM hasn't been initialized!"),
-            |guard| guard.as_mut().expect("TERM hasn't been initialized!"),
-        )
-    }
+    Projection::new(
+        guard,
+        |guard| guard.as_ref().expect("TERM hasn't been initialized!"),
+        |guard| guard.as_mut().expect("TERM hasn't been initialized!"),
+    )
 }
 
 const OK: i32 = 0;
@@ -167,28 +165,26 @@ impl<'a> Capability<'a> for Flag {
 /// Note that the `errret` parameter is provided to the function, meaning curses will not write
 /// error output to stderr in case of failure.
 pub fn setup(term: Option<&str>, fd: i32) -> bool {
-    // If cur_term is already initialized for a different $TERM value, calling setupterm() again
-    // will leak memory. Call reset() first to free previously allocated resources.
-    unsafe {
+    let result = unsafe {
+        // If cur_term is already initialized for a different $TERM value, calling setupterm() again
+        // will leak memory. Call reset() first to free previously allocated resources.
         reset();
 
-        let result = {
-            let mut err = 0;
-            if let Some(term) = term {
-                let term = CString::new(term).unwrap();
-                sys::setupterm(term.as_ptr(), fd, &mut err)
-            } else {
-                sys::setupterm(core::ptr::null(), fd, &mut err)
-            }
-        };
-
-        if result == self::OK {
-            *TERM.lock().expect("Mutex poisoned!") = Some(Term::new());
-            true
+        let mut err = 0;
+        if let Some(term) = term {
+            let term = CString::new(term).unwrap();
+            sys::setupterm(term.as_ptr(), fd, &mut err)
         } else {
-            *TERM.lock().expect("Mutex poisoned!") = None;
-            false
+            sys::setupterm(core::ptr::null(), fd, &mut err)
         }
+    };
+
+    if result == self::OK {
+        *TERM.lock().expect("Mutex poisoned!") = Some(Term::new());
+        true
+    } else {
+        *TERM.lock().expect("Mutex poisoned!") = None;
+        false
     }
 }
 
