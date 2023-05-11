@@ -165,7 +165,11 @@ fn guess_emoji_width(vars: &dyn Environment) {
         let new_width = fish_wcstoi(width_str.as_string().chars()).unwrap_or(1);
         let new_width = new_width.clamp(1, 2);
         FISH_EMOJI_WIDTH.store(new_width, Ordering::Relaxed);
-        FLOGF!(term_support, "Overriding default fish_emoji_width w/ ", new_width);
+        FLOGF!(
+            term_support,
+            "Overriding default fish_emoji_width w/ ",
+            new_width
+        );
         return;
     }
 
@@ -523,8 +527,8 @@ fn apply_term_hacks(vars: &dyn Environment) {
         crate::ffi::screen_set_midnight_commander_hack();
     }
 
-    // Be careful, variables like `enter_italics_mode` are #defined to dereference through
-    // `cur_term`.
+    // Be careful, accessing curses::term() requires that we've successfully initialized the curses
+    // subsystem.
     if !curses::is_initialized() {
         return;
     }
