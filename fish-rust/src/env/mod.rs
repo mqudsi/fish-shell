@@ -5,7 +5,7 @@ pub mod var;
 
 pub use env_ffi::EnvStackSetResult;
 pub use environment::*;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 pub use var::*;
 
@@ -37,14 +37,20 @@ mod ffi {
     }
 }
 
-pub fn setenv_lock(name: &str, value: &str, overwrite: bool) {
+/// Sets an environment variable after obtaining a lock, to try and improve the safety of
+/// environment variables.
+///
+/// As values could contain non-unicode characters, they must first be converted from &wstr to a
+/// `CString` with [`crate::common::wcs2zstring()`].
+pub fn setenv_lock(name: &str, value: &CStr, overwrite: bool) {
     unsafe {
         let name = CString::new(name).unwrap();
-        let value = CString::new(value).unwrap();
         self::ffi::setenv_lock(name.as_ptr(), value.as_ptr(), libc::c_int::from(overwrite));
     }
 }
 
+/// Unsets an environment variable after obtaining a lock, to try and improve the safety of
+/// environment variables.
 pub fn unsetenv_lock(name: &str) {
     unsafe {
         let name = CString::new(name).unwrap();

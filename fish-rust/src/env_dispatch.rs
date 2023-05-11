@@ -128,21 +128,22 @@ impl VarDispatchTable {
     }
 }
 
-fn handle_timezone(env_var_name: &wstr, vars: &dyn Environment) {
-    let var = vars.get_unless_empty(env_var_name).map(|v| v.as_string());
+fn handle_timezone(var_name: &wstr, vars: &dyn Environment) {
+    let var = vars.get_unless_empty(var_name).map(|v| v.as_string());
     FLOGF!(
         env_dispatch,
         "handle_timezone() current timezone var: |",
-        env_var_name,
+        var_name,
         "| => |",
         var.as_ref()
             .map(|v| v.as_utfstr())
             .unwrap_or(L!("MISSING/EMPTY")),
         "|"
     );
-    let name = env_var_name.to_string();
-    if let Some(var) = var {
-        setenv_lock(&name, &var.to_string(), true);
+    let name = var_name.to_string();
+    if let Some(value) = var {
+        let value = crate::common::wcs2zstring(&value);
+        setenv_lock(&name, &value, true);
     } else {
         unsetenv_lock(&name);
     }
@@ -617,11 +618,14 @@ fn does_term_support_setting_title(vars: &dyn Environment) -> bool {
 
 // Initialize the curses subsystem
 fn init_curses(vars: &dyn Environment) {
-    for var in CURSES_VARIABLES {
-        let name = var.to_string();
-        if let Some(var) = vars.getf_unless_empty(var, EnvMode::EXPORT) {
-            let value = var.as_string().to_string();
-            FLOGF!(term_support, "curses var ", name, "='", value, "'");
+    for var_name in CURSES_VARIABLES {
+        let name = var_name.to_string();
+        if let Some(value) = vars
+            .getf_unless_empty(var_name, EnvMode::EXPORT)
+            .map(|v| v.as_string())
+        {
+            FLOGF!(term_support, "curses var ", var_name, "='", value, "'");
+            let value = crate::common::wcs2zstring(&value);
             setenv_lock(&name, &value, true);
         } else {
             FLOGF!(term_support, "curses var ", name, " missing or empty");
@@ -690,9 +694,9 @@ fn init_locale(vars: &dyn Environment) {
             .getf_unless_empty(var_name, EnvMode::EXPORT)
             .map(|v| v.as_string());
         let name = var_name.to_string();
-        if let Some(var) = var {
-            let value = var.to_string();
+        if let Some(value) = var {
             FLOGF!(env_locale, "Locale var ", name, "='", value, "'");
+            let value = crate::common::wcs2zstring(&value);
             setenv_lock(&name, &value, true);
         } else {
             FLOGF!(env_locale, "Locale var ", name, " missing or empty");
