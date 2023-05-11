@@ -165,6 +165,7 @@ fn guess_emoji_width(vars: &dyn Environment) {
         let new_width = fish_wcstoi(width_str.as_string().chars()).unwrap_or(1);
         let new_width = new_width.clamp(1, 2);
         FISH_EMOJI_WIDTH.store(new_width, Ordering::Relaxed);
+        FLOGF!(term_support, "Overriding default fish_emoji_width w/ ", new_width);
         return;
     }
 
