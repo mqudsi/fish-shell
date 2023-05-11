@@ -532,7 +532,7 @@ fn apply_term_hacks(vars: &dyn Environment) {
         return;
     }
 
-    // #[cfg(target_os = "macos")]
+    #[cfg(target_os = "macos")]
     {
         // Hack in missing italics and dim capabilities omitted from macOS xterm-256color terminfo.
         // Helps Terminal.app and iTerm.
@@ -757,6 +757,7 @@ fn init_locale(vars: &dyn Environment) {
     );
 
     // #[cfg(feature = "have__nl_msg_cat_cntr")]
+    #[cfg(not(target_os = "macos"))]
     {
         if old_msg_locale.as_c_str() != new_msg_locale {
             // Make change known to GNU gettext.
