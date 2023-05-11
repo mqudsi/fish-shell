@@ -327,7 +327,7 @@ pub fn asan_before_exit() {
     if !is_forked_child() {
         unsafe {
             // Free ncurses terminal state
-            crate::curses::Term::reset();
+            crate::curses::reset();
         }
     }
 }

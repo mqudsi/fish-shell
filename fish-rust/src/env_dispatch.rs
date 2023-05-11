@@ -1,6 +1,6 @@
-use crate::curses::{self, Term};
+use crate::curses;
 use crate::env::{setenv_lock, unsetenv_lock, EnvMode, EnvStack, Environment};
-use crate::env::{CURSES_INITIALIZED, DEFAULT_READ_BYTE_LIMIT, READ_BYTE_LIMIT, TERM, TERM_HAS_XN};
+use crate::env::{CURSES_INITIALIZED, DEFAULT_READ_BYTE_LIMIT, READ_BYTE_LIMIT, TERM_HAS_XN};
 use crate::ffi::is_interactive_session;
 use crate::flog::FLOGF;
 use crate::output::ColorSupport;
@@ -48,8 +48,12 @@ static VAR_DISPATCH_TABLE: once_cell::sync::Lazy<VarDispatchTable> =
     once_cell::sync::Lazy::new(|| {
         let mut table = VarDispatchTable::default();
 
-        for name in LOCALE_VARIABLES.iter().chain(CURSES_VARIABLES.iter()) {
+        for name in LOCALE_VARIABLES.iter() {
             table.add_anon(name, handle_locale_change);
+        }
+
+        for name in CURSES_VARIABLES.iter() {
+            table.add_anon(name, handle_curses_change);
         }
 
         table.add(L!("TZ"), handle_tz_change);
@@ -494,15 +498,7 @@ fn initialize_curses_using_fallbacks(vars: &dyn Environment) {
             continue;
         }
 
-        let mut _err = 0_i32;
-        let success = match Term::setup(Some(term), libc::STDOUT_FILENO) {
-            Some(term) => {
-                *TERM.lock().expect("Mutex poiosoned!") = Some(term);
-                true
-            }
-            None => false,
-        };
-
+        let success = curses::setup(Some(term), libc::STDOUT_FILENO);
         if is_interactive_session() {
             if success {
                 FLOGF!(warning, wgettext!("Using fallback terminal type: "), term);
@@ -532,11 +528,11 @@ fn apply_term_hacks(vars: &dyn Environment) {
 
     // Be careful, variables like `enter_italics_mode` are #defined to dereference through
     // `cur_term`.
-    if !Term::is_initialized() {
+    if !curses::is_initialized() {
         return;
     }
 
-    #[cfg(target_os = "macos")]
+    // #[cfg(target_os = "macos")]
     {
         // Hack in missing italics and dim capabilities omitted from macOS xterm-256color terminfo.
         // Helps Terminal.app and iTerm.
@@ -551,28 +547,15 @@ fn apply_term_hacks(vars: &dyn Environment) {
                     const RITM_ESC: &str = "\x1B[23m";
                     const DIM_ESC: &str = "\x1B[2m";
 
-                    let mut term = TERM.lock().expect("Mutex poisoned!");
-                    let term = term.as_mut().unwrap();
-
-                    if term
-                        .strings
-                        .get(curses::Strings::ENTER_ITALICS_MODE)
-                        .is_none()
-                    {
-                        term.strings
-                            .set(curses::Strings::ENTER_ITALICS_MODE, SITM_ESC.to_string());
+                    let mut term = curses::term();
+                    if term.get(curses::ENTER_ITALICS_MODE).is_none() {
+                        term.set(curses::ENTER_ITALICS_MODE, SITM_ESC.to_string());
                     }
-                    if term
-                        .strings
-                        .get(curses::Strings::EXIT_ITALICS_MODE)
-                        .is_none()
-                    {
-                        term.strings
-                            .set(curses::Strings::EXIT_ITALICS_MODE, RITM_ESC.to_string());
+                    if term.get(curses::EXIT_ITALICS_MODE).is_none() {
+                        term.set(curses::EXIT_ITALICS_MODE, RITM_ESC.to_string());
                     }
-                    if term.strings.get(curses::Strings::ENTER_DIM_MODE).is_none() {
-                        term.strings
-                            .set(curses::Strings::ENTER_DIM_MODE, DIM_ESC.to_string());
+                    if term.get(curses::ENTER_DIM_MODE).is_none() {
+                        term.set(curses::ENTER_DIM_MODE, DIM_ESC.to_string());
                     }
                 }
             }
@@ -645,9 +628,7 @@ fn init_curses(vars: &dyn Environment) {
         }
     }
 
-    if let Some(term) = crate::curses::Term::setup(None, libc::STDOUT_FILENO) {
-        *TERM.lock().expect("Mutex poisoned!") = Some(term);
-    } else {
+    if !curses::setup(None, libc::STDOUT_FILENO) {
         if is_interactive_session() {
             let term = vars.get_unless_empty(L!("TERM")).map(|v| v.as_string());
             FLOGF!(warning, wgettext!("Could not set up terminal."));
@@ -677,10 +658,9 @@ fn init_curses(vars: &dyn Environment) {
     //
     // This was always implicitly conditional on curses being initialized - it's just that xn would
     // come back as false if `cur_term` were null in the C++ version of the code.
-    if Term::is_initialized() {
-        let term = TERM.lock().expect("Mutex poisoned!");
-        let term = term.as_ref().unwrap();
-        let xn = term.flags.get(curses::Flags::EAT_NEWLINE_GLITCH);
+    if curses::is_initialized() {
+        let mut term = curses::term();
+        let xn = term.get(curses::EAT_NEWLINE_GLITCH);
         TERM_HAS_XN.store(xn, Ordering::Relaxed);
     }
 
