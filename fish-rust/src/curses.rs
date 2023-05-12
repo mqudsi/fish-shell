@@ -66,12 +66,15 @@ mod sys {
 pub const ENTER_ITALICS_MODE: StringCap = StringCap::new("ZH");
 pub const EXIT_ITALICS_MODE: StringCap = StringCap::new("ZR");
 pub const ENTER_DIM_MODE: StringCap = StringCap::new("mh");
+pub const TO_STATUS_LINE: StringCap = StringCap::new("ts");
+pub const FROM_STATUS_LINE: StringCap = StringCap::new("fs");
 
 // Number capabilities
 pub const MAX_COLORS: Number = Number::new("Co");
 
 // Flag capabilities
 pub const EAT_NEWLINE_GLITCH: Flag = Flag::new("xn");
+pub const HAS_STATUS_LINE: Flag = Flag::new("hs");
 
 pub struct Term {
     has_overrides: AtomicBool,

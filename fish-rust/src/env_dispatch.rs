@@ -598,9 +598,25 @@ fn does_term_support_setting_title(vars: &dyn Environment) -> bool {
     if TITLE_TERMS.iter().any(|t| term.starts_with(*t)) {
         return true;
     }
+
     // Don't generate a title if we're in a dumb console session (e.g. without X)
     if crate::common::is_console_session() {
         return false;
+    }
+
+    // Check the termcap/terminfo database for has_status_line support (which is what the title is
+    // a bastardization of), and check that the terminal actually has a sequence to go to and return
+    // from the title née status line.
+    if curses::is_initialized() {
+        let term = curses::term();
+        if !term.get(curses::HAS_STATUS_LINE)
+            || term.get(curses::TO_STATUS_LINE).is_none()
+            || term.get(curses::FROM_STATUS_LINE).is_none()
+        {
+            return false;
+        }
+        // TODO: Actually use TO_STATUS_LINE and FROM_STATUS_LINE instead of the hard-coded escape
+        // sequences we currently use.
     }
 
     true
