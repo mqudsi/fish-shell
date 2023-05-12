@@ -207,7 +207,12 @@ fn guess_emoji_width(vars: &dyn Environment) {
 
 /// React to modifying the given variable.
 pub fn env_dispatch_var_change(key: &wstr, vars: &EnvStack) {
-    VAR_DISPATCH_TABLE.dispatch(key, vars);
+    use once_cell::sync::Lazy;
+
+    // We want to ignore variable changes until the dispatch table is explicitly initialized.
+    if let Some(dispatch_table) = Lazy::get(&VAR_DISPATCH_TABLE) {
+        dispatch_table.dispatch(key, vars);
+    }
 }
 
 fn handle_fish_term_change(vars: &dyn Environment) {
@@ -327,7 +332,12 @@ fn handle_fish_trace(vars: &dyn Environment) {
 }
 
 pub fn env_dispatch_init(vars: &EnvStack) {
+    use once_cell::sync::Lazy;
+
     run_inits(vars);
+    // env_dispatch_var_change() purposely supresses change notifications until the dispatch table
+    // was initialized elsewhere (either explicitly as below or via deref of VAR_DISPATCH_TABLE).
+    Lazy::force(&VAR_DISPATCH_TABLE);
 }
 
 pub fn env_dispatch_init_ffi() {
