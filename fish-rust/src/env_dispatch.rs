@@ -592,34 +592,15 @@ fn does_term_support_setting_title(vars: &dyn Environment) -> bool {
     let Some(term) = vars.get_unless_empty(L!("TERM")).map(|v| v.as_string()) else {
         return false;
     };
-    let term: &wstr = term.as_ref();
 
-    let recognized = TITLE_TERMS.contains(&term)
-        || term.starts_with(L!("xterm-"))
-        || term.starts_with(L!("screen-"))
-        || term.starts_with(L!("tmux-"));
-    if !recognized {
-        if [
-            L!("linux"),
-            L!("dumb"),
-            L!("vt100"), // NetBSD
-            L!("wsvt25"),
-        ]
-        .contains(&term)
-        {
-            return false;
-        }
-
-        let mut buf = [b'\0'; libc::PATH_MAX as usize];
-        let retval =
-            unsafe { libc::ttyname_r(libc::STDIN_FILENO, buf.as_mut_ptr().cast(), buf.len()) };
-        let buf = &buf[..buf.iter().position(|c| *c == b'\0').unwrap()];
-        if retval != 0
-            || buf.windows(b"tty".len()).any(|w| w == b"tty")
-            || buf.windows(b"/vc/".len()).any(|w| w == b"/vc/")
-        {
-            return false;
-        }
+    // Whitelist recognized terminal names
+    let term = term.as_utfstr();
+    if TITLE_TERMS.iter().any(|t| term.starts_with(*t)) {
+        return true;
+    }
+    // Don't generate a title if we're in a dumb console session (e.g. without X)
+    if crate::common::is_console_session() {
+        return false;
     }
 
     true

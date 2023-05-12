@@ -1898,10 +1898,18 @@ pub fn is_console_session() -> bool {
         let mut tty_name = [0u8; PATH_MAX];
         unsafe {
             if libc::ttyname_r(STDIN_FILENO, tty_name.as_mut_ptr().cast(), tty_name.len()) != 0 {
-                return false;
+                if cfg!(any(target_os = "illumos", target_os = "solaris")) {
+                    // Illumos/Solaris documents ttyname_r(3) as returning 0 in case of success but
+                    // actually returns a valid char * pointer - as if `ttyname(3)` were called (it
+                    // seems one is implemented by means of the other). Ignore the error and try to
+                    // read from our buffer (which should be safe because it was nul-initialized).
+                } else {
+                    return false;
+                }
             }
         }
-        // Check if the tty matches /dev/(console|dcons|tty[uv\d])
+
+        // Check if the tty matches /dev/(console|dcons|tty[uv\d]) or /vc/
         const LEN: usize = b"/dev/tty".len();
         (
         (
@@ -1909,8 +1917,9 @@ pub fn is_console_session() -> bool {
                 ([b'u', b'v'].contains(&tty_name[LEN]) || tty_name[LEN].is_ascii_digit())
         ) ||
         tty_name.starts_with(b"/dev/dcons\0") ||
-        tty_name.starts_with(b"/dev/console\0"))
-        // and that $TERM is simple, e.g. `xterm` or `vt100`, not `xterm-something` or `sun-color`.
+        tty_name.starts_with(b"/dev/console\0") ||
+        tty_name.starts_with(b"/vc/"))
+        // ...and that $TERM is simple, e.g. `linux` or `vt100`, not `xterm-foo` or `sun-color`
         && match env::var_os("TERM") {
             Some(term) => !term.as_bytes().contains(&b'-'),
             None => true,
