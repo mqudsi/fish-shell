@@ -48,11 +48,11 @@ static VAR_DISPATCH_TABLE: once_cell::sync::Lazy<VarDispatchTable> =
     once_cell::sync::Lazy::new(|| {
         let mut table = VarDispatchTable::default();
 
-        for name in LOCALE_VARIABLES.iter() {
+        for name in LOCALE_VARIABLES {
             table.add_anon(name, handle_locale_change);
         }
 
-        for name in CURSES_VARIABLES.iter() {
+        for name in CURSES_VARIABLES {
             table.add_anon(name, handle_curses_change);
         }
 
@@ -132,13 +132,12 @@ fn handle_timezone(var_name: &wstr, vars: &dyn Environment) {
     let var = vars.get_unless_empty(var_name).map(|v| v.as_string());
     FLOGF!(
         env_dispatch,
-        "handle_timezone() current timezone var: |",
+        "handle_timezone() current timezone var:",
         var_name,
-        "| => |",
+        "=>",
         var.as_ref()
             .map(|v| v.as_utfstr())
             .unwrap_or(L!("MISSING/EMPTY")),
-        "|"
     );
     let name = var_name.to_string();
     if let Some(value) = var {
@@ -168,7 +167,7 @@ fn guess_emoji_width(vars: &dyn Environment) {
         FISH_EMOJI_WIDTH.store(new_width, Ordering::Relaxed);
         FLOGF!(
             term_support,
-            "Overriding default fish_emoji_width w/ ",
+            "Overriding default fish_emoji_width w/",
             new_width
         );
         return;
@@ -188,7 +187,7 @@ fn guess_emoji_width(vars: &dyn Environment) {
         "Apple_Terminal" if version >= 400 => {
             // Apple Terminal on High Sierra
             FISH_EMOJI_WIDTH.store(2, Ordering::Relaxed);
-            FLOGF!(term_support, "default emoji width: 2 for ", term);
+            FLOGF!(term_support, "default emoji width: 2 for", term);
         }
         "iTerm.app" => {
             // iTerm2 now defaults to Unicode 9 sizes for anything after macOS 10.12
@@ -200,7 +199,7 @@ fn guess_emoji_width(vars: &dyn Environment) {
             // 1 and at most 2.
             let width = crate::fallback::wcwidth('😃').clamp(1, 2);
             FISH_EMOJI_WIDTH.store(width, Ordering::Relaxed);
-            FLOGF!(term_support, "default emoji width: ", width);
+            FLOGF!(term_support, "default emoji width:", width);
         }
     }
 }
@@ -375,26 +374,26 @@ fn update_fish_color_support(vars: &dyn Environment) {
         supports_256color = crate::wcstringutil::bool_from_string(&fish_term256);
         FLOGF!(
             term_support,
-            "256 color support determined by $fish_term256: ",
+            "256-color support determined by $fish_term256:",
             supports_256color
         );
     } else if term.find(L!("256color")).is_some() {
         // TERM contains "256color": 256 colors explicitly supported.
         supports_256color = true;
-        FLOGF!(term_support, "256 color support enabled for TERM=", term);
+        FLOGF!(term_support, "256-color support enabled for TERM", term);
     } else if term.find(L!("xterm")).is_some() {
         // Assume that all "xterm" terminals can handle 256
         supports_256color = true;
-        FLOGF!(term_support, "256 color support enable for TERM=", term);
+        FLOGF!(term_support, "256-color support enabled for TERM", term);
     }
     // See if terminfo happens to identify 256 colors
     else if let Some(max_colors) = max_colors {
         supports_256color = max_colors >= 256;
         FLOGF!(
             term_support,
-            "256 color support: ",
+            "256-color support:",
             max_colors,
-            " per terminfo entry for ",
+            "per termcap/terminfo entry for",
             term
         );
     }
@@ -404,7 +403,7 @@ fn update_fish_color_support(vars: &dyn Environment) {
         supports_24bit = crate::wcstringutil::bool_from_string(&fish_term24bit);
         FLOGF!(
             term_support,
-            "'fish_term24bit' preference: 24-bit color ",
+            "$fish_term24bit preference: 24-bit color",
             if supports_24bit {
                 "enabled"
             } else {
@@ -417,7 +416,7 @@ fn update_fish_color_support(vars: &dyn Environment) {
         supports_24bit = false;
         FLOGF!(
             term_support,
-            "True-color support: disabling for eterm/screen"
+            "True-color support: disabled for eterm/screen"
         );
     } else if max_colors.unwrap_or(0) > 32767 {
         // $TERM wins, xterm-direct reports 32767 colors and we assume that's the minimum as xterm
@@ -425,11 +424,11 @@ fn update_fish_color_support(vars: &dyn Environment) {
         supports_24bit = true;
         FLOGF!(
             term_support,
-            "True-color support: enabling per terminfo for ",
+            "True-color support: enabled per termcap/terminfo for",
             term,
-            " with ",
+            "with",
             max_colors.unwrap(),
-            " colors"
+            "colors"
         );
     } else if let Some(ct) = vars.get(L!("COLORTERM")).map(|v| v.as_string()) {
         // If someone sets $COLORTERM, that's the sort of color they want.
@@ -438,13 +437,13 @@ fn update_fish_color_support(vars: &dyn Environment) {
         }
         FLOGF!(
             term_support,
-            "True-color support: ",
+            "True-color support",
             if supports_24bit {
                 "enabled"
             } else {
                 "disabled"
             },
-            " per $COLORTERM=",
+            "per $COLORTERM",
             ct
         );
     } else if vars.get(L!("KONSOLE_VERSION")).is_some()
@@ -453,13 +452,13 @@ fn update_fish_color_support(vars: &dyn Environment) {
         // All Konsole versions that use $KONSOLE_VERSION are new enough to support this, so no
         // check is needed.
         supports_24bit = true;
-        FLOGF!(term_support, "True-color support: enabling for Konsole");
+        FLOGF!(term_support, "True-color support: enabled for Konsole");
     } else if let Some(it) = vars.get(L!("ITERM_SESSION_ID")).map(|v| v.as_string()) {
         // Supporting versions of iTerm include a colon here.
         // We assume that if this is iTerm it can't also be st, so having this check inside is okay.
         if !it.contains(':') {
             supports_24bit = true;
-            FLOGF!(term_support, "True-color support: enabling for iTerm");
+            FLOGF!(term_support, "True-color support: enabled for iTerm");
         }
     } else if term.starts_with("st-") {
         supports_24bit = true;
@@ -469,7 +468,7 @@ fn update_fish_color_support(vars: &dyn Environment) {
             supports_24bit = true;
             FLOGF!(
                 term_support,
-                "True-color support: enabling for VTE version ",
+                "True-color support: enabled for VTE version",
                 vte
             );
         }
@@ -513,11 +512,11 @@ fn initialize_curses_using_fallbacks(vars: &dyn Environment) {
         let success = curses::setup(Some(term), libc::STDOUT_FILENO);
         if is_interactive_session() {
             if success {
-                FLOGF!(warning, wgettext!("Using fallback terminal type: "), term);
+                FLOGF!(warning, wgettext!("Using fallback terminal type"), term);
             } else {
                 FLOGF!(
                     warning,
-                    wgettext!("Could not set up terminal using the fallback terminal type: "),
+                    wgettext!("Could not set up terminal using the fallback terminal type"),
                     term,
                 );
             }
@@ -634,11 +633,11 @@ fn init_curses(vars: &dyn Environment) {
             .getf_unless_empty(var_name, EnvMode::EXPORT)
             .map(|v| v.as_string())
         {
-            FLOGF!(term_support, "curses var ", var_name, "='", value, "'");
+            FLOGF!(term_support, "curses var", var_name, "=", value);
             let value = crate::common::wcs2zstring(&value);
             setenv_lock(&name, &value, true);
         } else {
-            FLOGF!(term_support, "curses var ", name, " missing or empty");
+            FLOGF!(term_support, "curses var", name, "is missing or empty");
             unsetenv_lock(&name);
         }
     }
@@ -648,11 +647,7 @@ fn init_curses(vars: &dyn Environment) {
             let term = vars.get_unless_empty(L!("TERM")).map(|v| v.as_string());
             FLOGF!(warning, wgettext!("Could not set up terminal."));
             if let Some(term) = term {
-                FLOGF!(
-                    warning,
-                    wgettext!("TERM environment variable set to: "),
-                    term
-                );
+                FLOGF!(warning, wgettext!("TERM environment variable set to"), term);
                 FLOGF!(
                     warning,
                     wgettext!("Check that this terminal type is supported on this system.")
@@ -705,17 +700,16 @@ fn init_locale(vars: &dyn Environment) {
             .map(|v| v.as_string());
         let name = var_name.to_string();
         if let Some(value) = var {
-            FLOGF!(env_locale, "Locale var ", name, "='", value, "'");
+            FLOGF!(env_locale, "locale var", name, "=", value);
             let value = crate::common::wcs2zstring(&value);
             setenv_lock(&name, &value, true);
         } else {
-            FLOGF!(env_locale, "Locale var ", name, " missing or empty");
+            FLOGF!(env_locale, "locale var", name, "is missing or empty");
             unsetenv_lock(&name);
         }
     }
 
-    let locale =
-        unsafe { CStr::from_ptr(libc::setlocale(libc::LC_ALL, b"\0".as_ptr().cast()).cast()) };
+    let locale = unsafe { CStr::from_ptr(libc::setlocale(libc::LC_ALL, b"\0".as_ptr().cast())) };
 
     // Try to get a multibyte-capable encoding.
     // A "C" locale is broken for our purpsose: any wchar function will break on it. So we try
@@ -734,7 +728,7 @@ fn init_locale(vars: &dyn Environment) {
                 libc::setlocale(libc::LC_CTYPE, locale.as_ptr());
             }
             if crate::compat::MB_CUR_MAX() > 1 {
-                FLOGF!(env_locale, "Fixed locale: ", locale);
+                FLOGF!(env_locale, "Fixed locale:", locale);
                 break;
             }
         }
@@ -754,20 +748,20 @@ fn init_locale(vars: &dyn Environment) {
     crate::common::fish_setlocale();
     FLOGF!(
         env_locale,
-        "init_locale() setlocale(): ",
+        "init_locale() setlocale():",
         locale.to_string_lossy()
     );
 
     let new_msg_locale =
-        unsafe { CStr::from_ptr(libc::setlocale(libc::LC_MESSAGES, std::ptr::null()).cast()) };
+        unsafe { CStr::from_ptr(libc::setlocale(libc::LC_MESSAGES, std::ptr::null())) };
     FLOGF!(
         env_locale,
-        "Old LC_MESSAGES locale: ",
+        "Old LC_MESSAGES locale:",
         old_msg_locale.to_string_lossy()
     );
     FLOGF!(
         env_locale,
-        "New LC_MESSAGES locale: ",
+        "New LC_MESSAGES locale:",
         new_msg_locale.to_string_lossy()
     );
 
@@ -794,8 +788,8 @@ pub fn use_posix_spawn() -> bool {
 const fn allow_use_posix_spawn() -> bool {
     #![allow(clippy::if_same_then_else)]
     #![allow(clippy::needless_bool)]
-    // OpenBSD's posix_spawn returns status 127, instead of erroring with ENOEXEC, when faced with a
-    // shebangless script. Disable posix_spawn on OpenBSD.
+    // OpenBSD's posix_spawn returns status 127 instead of erroring with ENOEXEC when faced with a
+    // shebang-less script. Disable posix_spawn on OpenBSD.
     if cfg!(target_os = "openbsd") {
         false
     } else if cfg!(not(target_os = "linux")) {
