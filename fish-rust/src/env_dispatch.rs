@@ -602,7 +602,7 @@ fn does_term_support_setting_title(vars: &dyn Environment) -> bool {
         if [
             L!("linux"),
             L!("dumb"),
-            /* NetBSD */ L!("vt100"),
+            L!("vt100"), // NetBSD
             L!("wsvt25"),
         ]
         .contains(&term)
