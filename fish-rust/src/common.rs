@@ -23,7 +23,7 @@ use libc::{EINTR, EIO, O_WRONLY, SIGTTOU, SIG_IGN, STDERR_FILENO, STDIN_FILENO, 
 use num_traits::ToPrimitive;
 use once_cell::sync::Lazy;
 use std::env;
-use std::ffi::{CString, OsString};
+use std::ffi::{CStr, CString, OsString};
 use std::mem::{self, ManuallyDrop};
 use std::ops::{Deref, DerefMut};
 use std::os::fd::{AsRawFd, RawFd};
@@ -34,6 +34,7 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time;
+use widestring::Utf32String;
 use widestring_suffix::widestrs;
 
 // Highest legal ASCII value.
@@ -1995,6 +1996,50 @@ where
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         (self.view_mut)(&mut self.value)
+    }
+}
+
+/// A trait to make it more convenient to pass ascii/Unicode strings to functions that can take
+/// non-Unicode values.
+pub trait ToCString {
+    fn to_cstring(self) -> CString;
+}
+
+impl ToCString for &str {
+    fn to_cstring(self) -> CString {
+        CString::new(self).unwrap()
+    }
+}
+
+impl ToCString for CString {
+    fn to_cstring(self) -> CString {
+        self
+    }
+}
+
+impl ToCString for &CStr {
+    fn to_cstring(self) -> CString {
+        self.to_owned()
+    }
+}
+
+impl ToCString for &wstr {
+    /// The wide string may contain non-Unicode bytes mapped to the private-use Unicode range, so we
+    /// have to use [`wcs2zstring()`](self::wcs2zstring) to convert it correctly.
+    fn to_cstring(self) -> CString {
+        self::wcs2zstring(self)
+    }
+}
+
+impl ToCString for &Utf32String {
+    fn to_cstring(self) -> CString {
+        self.as_utfstr().to_cstring()
+    }
+}
+
+impl ToCString for &String {
+    fn to_cstring(self) -> CString {
+        self.as_str().to_cstring()
     }
 }
 
