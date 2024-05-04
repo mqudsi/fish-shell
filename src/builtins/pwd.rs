@@ -12,7 +12,7 @@ const long_options: &[woption] = &[
     wopt(L!("physical"), no_argument, 'P'),
 ];
 
-pub fn pwd(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn pwd(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let mut resolve_symlinks = false;
@@ -27,7 +27,7 @@ pub fn pwd(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opti
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], false);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => panic!("unexpected retval from wgetopt_long"),
         }
@@ -37,7 +37,7 @@ pub fn pwd(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opti
         streams
             .err
             .append(wgettext_fmt!(BUILTIN_ERR_ARG_COUNT1, cmd, 0, argc - 1));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     let mut pwd = WString::new();
@@ -53,11 +53,11 @@ pub fn pwd(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opti
                 cmd,
                 errno().to_string()
             ));
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         }
     }
     if pwd.is_empty() {
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
     streams.out.appendln(pwd);
     return STATUS_CMD_OK;

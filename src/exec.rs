@@ -250,6 +250,7 @@ pub fn exec_job(parser: &Parser, job: &Job, block_io: IoChain) -> bool {
 /// \param apply_exit_status if set, update $status within the parser, otherwise do not.
 ///
 /// \return a value appropriate for populating $status.
+// TODO: Convert to Result<(), NonZeroU8>
 pub fn exec_subshell(
     cmd: &wstr,
     parser: &Parser,
@@ -272,6 +273,7 @@ pub fn exec_subshell(
 /// "success" (even though the command may have failed), a non-zero return means that we should
 /// halt expansion. If the \p pgid is supplied, then any spawned external commands should join that
 /// pgroup.
+// TODO: change return type to a result
 pub fn exec_subshell_for_expand(
     cmd: &wstr,
     parser: &Parser,
@@ -293,7 +295,7 @@ pub fn exec_subshell_for_expand(
     if break_expand {
         ret
     } else {
-        STATUS_CMD_OK.unwrap()
+        STATUS_CMD_OK.map(|_| 0).unwrap()
     }
 }
 
@@ -312,16 +314,16 @@ fn exit_code_from_exec_error(err: libc::c_int) -> libc::c_int {
         ENOENT | ENOTDIR => {
             // This indicates either the command was not found, or a file redirection was not found.
             // We do not use posix_spawn file redirections so this is always command-not-found.
-            STATUS_CMD_UNKNOWN.unwrap()
+            STATUS_CMD_UNKNOWN.get().into()
         }
         EACCES | ENOEXEC => {
             // The file is not executable for various reasons.
-            STATUS_NOT_EXECUTABLE.unwrap()
+            STATUS_NOT_EXECUTABLE.get().into()
         }
         #[cfg(target_os = "macos")]
         libc::EBADARCH => {
             // This is for e.g. running ARM app on Intel Mac.
-            STATUS_NOT_EXECUTABLE.unwrap()
+            STATUS_NOT_EXECUTABLE.into()
         }
         _ => {
             // Generic failure.
@@ -1478,7 +1480,7 @@ fn exec_subshell_internal(
     let Ok(bufferfill) = IoBufferfill::create_opts(parser.libdata().pods.read_limit, STDOUT_FILENO)
     else {
         *break_expand = true;
-        return STATUS_CMD_ERROR.unwrap();
+        return STATUS_CMD_ERROR.get().into();
     };
 
     let mut io_chain = IoChain::new();
@@ -1487,7 +1489,7 @@ fn exec_subshell_internal(
     let buffer = IoBufferfill::finish(bufferfill);
     if buffer.discarded() {
         *break_expand = true;
-        return STATUS_READ_TOO_MUCH.unwrap();
+        return STATUS_READ_TOO_MUCH.get().into();
     }
 
     if eval_res.break_expand {

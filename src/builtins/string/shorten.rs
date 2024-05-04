@@ -67,7 +67,7 @@ impl<'args> StringSubCommand<'args> for Shorten<'args> {
         streams: &mut IoStreams,
         optind: &mut usize,
         args: &[&wstr],
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         let mut min_width = usize::MAX;
         let mut inputs = Vec::new();
 
@@ -237,7 +237,7 @@ impl<'args> StringSubCommand<'args> for Shorten<'args> {
         if nsub > 0 {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+Err(STATUS_CMD_ERROR)
         }
     }
 }

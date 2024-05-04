@@ -47,6 +47,7 @@ mod prelude {
     pub use super::shared::*;
     pub use libc::c_int;
     pub use std::borrow::Cow;
+    pub use std::num::NonZeroU8;
 
     #[allow(unused_imports)]
     pub(crate) use crate::{

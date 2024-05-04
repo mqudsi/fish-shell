@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 static RNG: Lazy<Mutex<SmallRng>> = Lazy::new(|| Mutex::new(SmallRng::from_entropy()));
 
-pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let print_hints = false;
@@ -26,11 +26,11 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => {
                 panic!("unexpected retval from wgeopter.next()");
@@ -48,7 +48,7 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
             streams
                 .err
                 .append(wgettext_fmt!("%ls: nothing to choose from\n", cmd));
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
 
         let rand = RNG.lock().unwrap().gen_range(0..arg_count - 1);
@@ -82,7 +82,7 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
             // Seed the engine persistently
             let num = parse_ll(streams, cmd, argv[i]);
             match num {
-                Err(_) => return STATUS_INVALID_ARGS,
+                Err(_) => return Err(STATUS_INVALID_ARGS),
                 Ok(x) => {
                     let mut engine = RNG.lock().unwrap();
                     *engine = SmallRng::seed_from_u64(x as u64);
@@ -93,36 +93,36 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
         2 => {
             // start is first, end is second
             match parse_ll(streams, cmd, argv[i]) {
-                Err(_) => return STATUS_INVALID_ARGS,
+                Err(_) => return Err(STATUS_INVALID_ARGS),
                 Ok(x) => start = x,
             }
 
             match parse_ll(streams, cmd, argv[i + 1]) {
-                Err(_) => return STATUS_INVALID_ARGS,
+                Err(_) => return Err(STATUS_INVALID_ARGS),
                 Ok(x) => end = x,
             }
         }
         3 => {
             // start, step, end
             match parse_ll(streams, cmd, argv[i]) {
-                Err(_) => return STATUS_INVALID_ARGS,
+                Err(_) => return Err(STATUS_INVALID_ARGS),
                 Ok(x) => start = x,
             }
 
             // start, step, end
             match parse_ull(streams, cmd, argv[i + 1]) {
-                Err(_) => return STATUS_INVALID_ARGS,
+                Err(_) => return Err(STATUS_INVALID_ARGS),
                 Ok(0) => {
                     streams
                         .err
                         .append(wgettext_fmt!("%ls: STEP must be a positive integer\n", cmd,));
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
                 Ok(x) => step = x,
             }
 
             match parse_ll(streams, cmd, argv[i + 2]) {
-                Err(_) => return STATUS_INVALID_ARGS,
+                Err(_) => return Err(STATUS_INVALID_ARGS),
                 Ok(x) => end = x,
             }
         }
@@ -130,7 +130,7 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
             streams
                 .err
                 .append(wgettext_fmt!("%ls: too many arguments\n", cmd,));
-            return Some(1);
+            return Err(NonZeroU8::new(1).unwrap());
         }
     }
 
@@ -138,7 +138,7 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
         streams
             .err
             .append(wgettext_fmt!("%ls: END must be greater than START\n", cmd,));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     // Using abs_diff() avoids an i64 overflow if start is i64::MIN and end is i64::MAX
@@ -148,7 +148,7 @@ pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> O
             "%ls: range contains only one possible value\n",
             cmd,
         ));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     let rand = {

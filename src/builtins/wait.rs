@@ -94,9 +94,9 @@ fn is_completed(wh: &WaitHandleRef) -> bool {
 /// Wait for the given wait handles to be marked as completed.
 /// If \p any_flag is set, wait for the first one; otherwise wait for all.
 /// \return a status code.
-fn wait_for_completion(parser: &Parser, whs: &[WaitHandleRef], any_flag: bool) -> Option<c_int> {
+fn wait_for_completion(parser: &Parser, whs: &[WaitHandleRef], any_flag: bool) -> Result<Option<()>, NonZeroU8> {
     if whs.is_empty() {
-        return Some(0);
+        return STATUS_CMD_OK;
     }
 
     let mut sigint = SigChecker::new_sighupint();
@@ -117,16 +117,16 @@ fn wait_for_completion(parser: &Parser, whs: &[WaitHandleRef], any_flag: bool) -
                     }
                 }
             }
-            return Some(0);
+            return STATUS_CMD_OK;
         }
         if sigint.check() {
-            return Some(128 + libc::SIGINT);
+            return Err(NonZeroU8::new(128 + libc::SIGINT as u8).unwrap());
         }
         proc_wait_any(parser);
     }
 }
 
-pub fn wait(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn wait(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let mut any_flag = false; // flag for -n option
@@ -150,11 +150,11 @@ pub fn wait(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => {
                 panic!("unexpected retval from wgeopter.next()");
@@ -207,7 +207,7 @@ pub fn wait(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
         }
     }
     if wait_handles.is_empty() {
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
     return wait_for_completion(parser, &wait_handles, any_flag);
 }

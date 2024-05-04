@@ -25,6 +25,7 @@ use crate::universal_notifier::default_notifier;
 use crate::wchar::prelude::*;
 use crate::wcstringutil::join_strings;
 use crate::wutil::{fish_wcstol, wgetcwd, wgettext};
+use std::num::NonZeroU8;
 use std::sync::atomic::Ordering;
 
 use lazy_static::lazy_static;
@@ -57,14 +58,15 @@ impl Default for EnvStackSetResult {
     }
 }
 
-impl From<EnvStackSetResult> for c_int {
+impl From<EnvStackSetResult> for Result<Option<()>, NonZeroU8> {
     fn from(r: EnvStackSetResult) -> Self {
+        // TODO: Implement via From<u8> instead
         match r {
-            EnvStackSetResult::ENV_OK => 0,
-            EnvStackSetResult::ENV_PERM => 1,
-            EnvStackSetResult::ENV_SCOPE => 2,
-            EnvStackSetResult::ENV_INVALID => 3,
-            EnvStackSetResult::ENV_NOT_FOUND => 4,
+            EnvStackSetResult::ENV_OK => Ok(Some(())),
+            EnvStackSetResult::ENV_PERM => Err(NonZeroU8::new(1).unwrap()),
+            EnvStackSetResult::ENV_SCOPE => Err(NonZeroU8::new(2).unwrap()),
+            EnvStackSetResult::ENV_INVALID => Err(NonZeroU8::new(3).unwrap()),
+            EnvStackSetResult::ENV_NOT_FOUND => Err(NonZeroU8::new(4).unwrap()),
         }
     }
 }

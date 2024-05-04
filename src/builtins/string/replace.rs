@@ -41,16 +41,16 @@ impl<'args> StringSubCommand<'args> for Replace<'args> {
         optind: &mut usize,
         args: &[&'args wstr],
         streams: &mut IoStreams,
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         let cmd = args[0];
         let Some(pattern) = args.get(*optind).copied() else {
             string_error!(streams, BUILTIN_ERR_ARG_COUNT0, cmd);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         };
         *optind += 1;
         let Some(replacement) = args.get(*optind).copied() else {
             string_error!(streams, BUILTIN_ERR_ARG_COUNT1, cmd, 1, 2);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         };
         *optind += 1;
 
@@ -65,14 +65,14 @@ impl<'args> StringSubCommand<'args> for Replace<'args> {
         streams: &mut IoStreams,
         optind: &mut usize,
         args: &[&wstr],
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         let cmd = args[0];
 
         let replacer = match StringReplacer::new(self.pattern, self.replacement, self) {
             Ok(x) => x,
             Err(e) => {
                 e.print_error(args, streams);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
         };
 
@@ -88,7 +88,7 @@ impl<'args> StringSubCommand<'args> for Replace<'args> {
                         cmd,
                         e.error_message()
                     );
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
             };
             replace_count += replaced as usize;
@@ -108,7 +108,7 @@ impl<'args> StringSubCommand<'args> for Replace<'args> {
         if replace_count > 0 {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+Err(STATUS_CMD_ERROR)
         }
     }
 }

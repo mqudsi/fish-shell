@@ -14,13 +14,9 @@ use super::prelude::*;
 
 /// The  source builtin, sometimes called `.`. Evaluates the contents of a file in the current
 /// context.
-pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
+pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let argc = args.len();
-
-    let opts = match HelpOnlyCmdOpts::parse(args, parser, streams) {
-        Ok(opts) => opts,
-        Err(err) => return err,
-    };
+    let opts = HelpOnlyCmdOpts::parse(args, parser, streams)?;
     let cmd = args[0];
 
     if opts.print_help {
@@ -41,12 +37,12 @@ pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
             streams
                 .err
                 .append(wgettext_fmt!("%ls: stdin is closed\n", cmd));
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         }
         // Either a bare `source` which means to implicitly read from stdin or an explicit `-`.
         if argc == optind && isatty(streams.stdin_fd) {
             // Don't implicitly read from the terminal.
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         }
         func_filename = FilenameRef::new(L!("-").to_owned());
         fd = streams.stdin_fd;
@@ -63,7 +59,7 @@ pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                     &esc
                 ));
                 builtin_wperror(cmd, streams);
-                return STATUS_CMD_ERROR;
+                return Err(STATUS_CMD_ERROR);
             }
         };
 
@@ -76,7 +72,7 @@ pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                 cmd,
                 &esc
             ));
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         }
 
         if buf.st_mode & S_IFMT != S_IFREG {
@@ -84,7 +80,7 @@ pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
             streams
                 .err
                 .append(wgettext_fmt!("%ls: '%ls' is not a file\n", cmd, esc));
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         }
 
         func_filename = FilenameRef::new(args[optind].to_owned());
@@ -109,22 +105,21 @@ pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
     }
     parser.vars().set_argv(argv_list);
 
-    let mut retval = reader_read(parser, fd, streams.io_chain);
+    let retval = reader_read(parser, fd, streams.io_chain);
 
     parser.pop_block(sb);
 
-    if retval != STATUS_CMD_OK.unwrap() {
+    // Do not close fd after calling reader_read. reader_read automatically closes it before calling
+    // eval.
+    if retval != 0 {
         let esc = escape(&func_filename);
         streams.err.append(wgettext_fmt!(
             "%ls: Error while reading file '%ls'\n",
             cmd,
             if esc == "-" { L!("<stdin>") } else { &esc }
         ));
+        Err(NonZeroU8::new(retval.try_into().unwrap()).unwrap())
     } else {
-        retval = parser.get_last_status();
+        parser.get_last_result()
     }
-
-    // Do not close fd after calling reader_read. reader_read automatically closes it before calling
-    // eval.
-    Some(retval)
 }

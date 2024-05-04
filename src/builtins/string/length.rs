@@ -30,7 +30,7 @@ impl StringSubCommand<'_> for Length {
         streams: &mut IoStreams,
         optind: &mut usize,
         args: &[&wstr],
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         let mut nnonempty = 0usize;
 
         for (arg, _) in arguments(args, optind, streams) {
@@ -68,7 +68,7 @@ impl StringSubCommand<'_> for Length {
         if nnonempty > 0 {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+Err(STATUS_CMD_ERROR)
         }
     }
 }

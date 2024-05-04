@@ -6,7 +6,7 @@ use crate::parser::BlockType;
 use crate::wcstringutil::join_strings;
 use libc::{STDERR_FILENO, STDOUT_FILENO};
 
-pub fn eval(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
+pub fn eval(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let argc = args.len();
     if argc <= 1 {
         return STATUS_CMD_OK;
@@ -28,7 +28,7 @@ pub fn eval(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Opt
         match IoBufferfill::create_opts(parser.libdata().pods.read_limit, STDOUT_FILENO) {
             Err(_) => {
                 // We were unable to create a pipe, probably fd exhaustion.
-                return STATUS_CMD_ERROR;
+                return Err(STATUS_CMD_ERROR);
             }
             Ok(buffer) => {
                 stdout_fill = Some(buffer.clone());
@@ -43,7 +43,7 @@ pub fn eval(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Opt
         match IoBufferfill::create_opts(parser.libdata().pods.read_limit, STDERR_FILENO) {
             Err(_) => {
                 // We were unable to create a pipe, probably fd exhaustion.
-                return STATUS_CMD_ERROR;
+                return Err(STATUS_CMD_ERROR);
             }
             Ok(buffer) => {
                 stderr_fill = Some(buffer.clone());
@@ -58,7 +58,7 @@ pub fn eval(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Opt
         // where we have an argument but nothing is executed.
         STATUS_CMD_OK
     } else {
-        Some(res.status.status_value())
+        res.status.status_result().map(|()| Some(()))
     };
 
     // Finish the bufferfills - exhaust and close our pipes.

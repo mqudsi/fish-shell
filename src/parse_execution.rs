@@ -230,7 +230,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_CMD_ERROR.unwrap(),
+                STATUS_CMD_ERROR.get().into(),
                 infinite_recursive_node,
                 INFINITE_FUNC_RECURSION_ERR_MSG,
                 func_name
@@ -249,7 +249,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_CMD_ERROR.unwrap(),
+                STATUS_CMD_ERROR.get().into(),
                 job_list,
                 CALL_STACK_LIMIT_EXCEEDED_ERR_MSG
             );
@@ -331,7 +331,7 @@ impl<'a> ParseExecutionContext {
                     return report_error!(
                         self,
                         ctx,
-                        STATUS_NOT_EXECUTABLE.unwrap(),
+                        STATUS_NOT_EXECUTABLE.get().into(),
                         &statement.command,
                         concat!(
                             "Unknown command. A component of '%ls' is not a ",
@@ -343,7 +343,7 @@ impl<'a> ParseExecutionContext {
                     return report_error!(
                         self,
                         ctx,
-                        STATUS_NOT_EXECUTABLE.unwrap(),
+                        STATUS_NOT_EXECUTABLE.get().into(),
                         &statement.command,
                         "Unknown command. A component of '%ls' is not a directory.",
                         cmd
@@ -354,7 +354,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_NOT_EXECUTABLE.unwrap(),
+                STATUS_NOT_EXECUTABLE.get().into(),
                 &statement.command,
                 "Unknown command. '%ls' exists but is not an executable file.",
                 cmd
@@ -419,7 +419,7 @@ impl<'a> ParseExecutionContext {
         report_error_formatted!(
             self,
             ctx,
-            STATUS_CMD_UNKNOWN.unwrap(),
+            STATUS_CMD_UNKNOWN.get().into(),
             &statement.command,
             error
         )
@@ -544,12 +544,12 @@ impl<'a> ParseExecutionContext {
             // This means that the error positions are relative to the beginning
             // of the token; we need to make them relative to the original source.
             parse_error_offset_source_start(&mut errors, pos_of_command_token);
-            return self.report_errors(ctx, STATUS_ILLEGAL_CMD.unwrap(), &errors);
+            return self.report_errors(ctx, STATUS_ILLEGAL_CMD.get().into(), &errors);
         } else if expand_err == ExpandResultCode::wildcard_no_match {
             return report_error!(
                 self,
                 ctx,
-                STATUS_UNMATCHED_WILDCARD.unwrap(),
+                STATUS_UNMATCHED_WILDCARD.get().into(),
                 statement,
                 WILDCARD_ERR_MSG,
                 &self.node_source(statement)
@@ -563,7 +563,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_ILLEGAL_CMD.unwrap(),
+                STATUS_ILLEGAL_CMD.get().into(),
                 &statement.command,
                 "The expanded command was empty."
             );
@@ -577,7 +577,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_ILLEGAL_CMD.unwrap(),
+                STATUS_ILLEGAL_CMD.get().into(),
                 &statement.command,
                 "The expanded command is a keyword."
             );
@@ -936,7 +936,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_EXPAND_ERROR.unwrap(),
+                STATUS_EXPAND_ERROR.get().into(),
                 &header.var_name,
                 FAILED_EXPANSION_VARIABLE_NAME_ERR_MSG,
                 for_var_name
@@ -947,7 +947,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_INVALID_ARGS.unwrap(),
+                STATUS_INVALID_ARGS.get().into(),
                 header.var_name,
                 BUILTIN_ERR_VARNAME,
                 "for",
@@ -968,7 +968,7 @@ impl<'a> ParseExecutionContext {
             return report_error!(
                 self,
                 ctx,
-                STATUS_INVALID_ARGS.unwrap(),
+                STATUS_INVALID_ARGS.get().into(),
                 header.var_name,
                 "%ls: %ls: cannot overwrite read-only variable",
                 "for",
@@ -1092,7 +1092,7 @@ impl<'a> ParseExecutionContext {
                 // 'if' condition failed, no else clause, return 0, we're done.
                 // No job list means no successful conditions, so return 0 (issue #1443).
                 ctx.parser()
-                    .set_last_statuses(Statuses::just(STATUS_CMD_OK.unwrap()));
+                    .set_last_statuses(Statuses::just(STATUS_CMD_OK.map(|_| 0).unwrap()));
             }
             Some(job_list_to_execute) => {
                 // Execute the job list we got.
@@ -1146,7 +1146,7 @@ impl<'a> ParseExecutionContext {
                 return report_error!(
                     self,
                     ctx,
-                    STATUS_UNMATCHED_WILDCARD.unwrap(),
+                    STATUS_UNMATCHED_WILDCARD.get().into(),
                     &statement.argument,
                     WILDCARD_ERR_MSG,
                     &self.node_source(&statement.argument)
@@ -1157,7 +1157,7 @@ impl<'a> ParseExecutionContext {
                     return report_error!(
                         self,
                         ctx,
-                        STATUS_INVALID_ARGS.unwrap(),
+                        STATUS_INVALID_ARGS.get().into(),
                         &statement.argument,
                         "switch: Expected at most one argument, got %lu\n",
                         switch_values_expanded.len()
@@ -1345,7 +1345,11 @@ impl<'a> ParseExecutionContext {
             &mut shim_arguments,
             NodeRef::new(self.pstree(), statement as *const ast::BlockStatement),
         );
-        let err_code = err_code.unwrap();
+        let err_code = match err_code {
+            Ok(Some(())) => 0,
+            Ok(None) => panic!("Unexpected missing exit code!"),
+            Err(n) => n.get() as i32,
+        };
         ctx.parser().libdata_mut().pods.status_count += 1;
         ctx.parser().set_last_statuses(Statuses::just(err_code));
 
@@ -1432,7 +1436,7 @@ impl<'a> ParseExecutionContext {
                         return report_error!(
                             self,
                             ctx,
-                            STATUS_UNMATCHED_WILDCARD.unwrap(),
+                            STATUS_UNMATCHED_WILDCARD.get().into(),
                             arg_node,
                             WILDCARD_ERR_MSG,
                             &self.node_source(*arg_node)
@@ -1483,7 +1487,7 @@ impl<'a> ParseExecutionContext {
                     return report_error!(
                         self,
                         ctx,
-                        STATUS_INVALID_ARGS.unwrap(),
+                        STATUS_INVALID_ARGS.get().into(),
                         redir_node,
                         "Invalid redirection: %ls",
                         &self.node_source(redir_node)
@@ -1508,7 +1512,7 @@ impl<'a> ParseExecutionContext {
                 return report_error!(
                     self,
                     ctx,
-                    STATUS_INVALID_ARGS.unwrap(),
+                    STATUS_INVALID_ARGS.get().into(),
                     redir_node,
                     "Invalid redirection target: %ls",
                     target
@@ -1527,7 +1531,7 @@ impl<'a> ParseExecutionContext {
                 return report_error!(
                     self,
                     ctx,
-                    STATUS_INVALID_ARGS.unwrap(),
+                    STATUS_INVALID_ARGS.get().into(),
                     redir_node,
                     "Requested redirection to '%ls', which is not a valid file descriptor",
                     &spec.target
@@ -1647,7 +1651,7 @@ impl<'a> ParseExecutionContext {
                 return report_error!(
                     self,
                     ctx,
-                    STATUS_INVALID_ARGS.unwrap(),
+                    STATUS_INVALID_ARGS.get().into(),
                     job_node,
                     ERROR_TIME_BACKGROUND
                 );
@@ -1855,7 +1859,7 @@ impl<'a> ParseExecutionContext {
                 result = report_error!(
                     self,
                     ctx,
-                    STATUS_INVALID_ARGS.unwrap(),
+                    STATUS_INVALID_ARGS.get().into(),
                     &jc.pipe,
                     ILLEGAL_FD_ERR_MSG,
                     &self.node_source(&jc.pipe)

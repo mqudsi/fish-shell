@@ -11,7 +11,7 @@ fn parse_options(
     args: &mut [&wstr],
     parser: &Parser,
     streams: &mut IoStreams,
-) -> Result<(Options, usize), Option<c_int>> {
+) -> Result<(Options, usize), NonZeroU8> {
     let cmd = args[0];
 
     const SHORT_OPTS: &wstr = L!(":h");
@@ -44,12 +44,11 @@ fn parse_options(
 }
 
 /// Function for handling the return builtin.
-pub fn r#return(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
-    let mut retval = match parse_return_value(args, parser, streams) {
-        Ok(v) => v,
-        Err(e) => return e,
+pub fn r#return(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+    let retval = match parse_return_value(args, parser, streams)? {
+        None => return STATUS_CMD_OK, // early exit
+        Some(code) => code,
     };
-
     let has_function_block = parser.blocks().iter().any(|b| b.is_function_call());
 
     // *nix does not support negative return values, but our `return` builtin happily accepts being
@@ -58,9 +57,15 @@ pub fn r#return(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) ->
     // evaluating to a `$status` of 0 and keeps us from running into undefined behavior by trying to
     // left shift a negative value in W_EXITCODE().
     // Note in Rust, dividend % divisor has the same sign as the dividend.
-    if retval < 0 {
-        retval = 256 - (retval % 256).abs();
-    }
+    let retval = if retval < 0 {
+        (256 - (retval % 256).abs()) as u8
+        } else {
+            (retval % 256) as u8
+    };
+    let result = match retval {
+        0 => STATUS_CMD_OK,
+        n => Err(NonZeroU8::new(n).unwrap()),
+    };
 
     // If we're not in a function, exit the current script (but not an interactive shell).
     if !has_function_block {
@@ -68,29 +73,24 @@ pub fn r#return(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) ->
         if !ld.is_interactive {
             ld.exit_current_script = true;
         }
-        return Some(retval);
+        return result;
     }
 
     // Mark a return in the libdata.
     parser.libdata_mut().pods.returning = true;
-
-    return Some(retval);
+    result
 }
 
 pub fn parse_return_value(
     args: &mut [&wstr],
     parser: &Parser,
     streams: &mut IoStreams,
-) -> Result<i32, Option<c_int>> {
+) -> Result<Option<i32>, NonZeroU8> {
     let cmd = args[0];
-    let (opts, optind) = match parse_options(args, parser, streams) {
-        Ok((opts, optind)) => (opts, optind),
-        Err(err @ Some(_)) if err != STATUS_CMD_OK => return Err(err),
-        Err(err) => panic!("Illogical exit code from parse_options(): {err:?}"),
-    };
+    let (opts, optind) = parse_options(args, parser, streams)?;
     if opts.print_help {
         builtin_print_help(parser, streams, cmd);
-        return Err(STATUS_CMD_OK);
+        return Ok(None);
     }
     if optind + 1 < args.len() {
         streams
@@ -100,16 +100,16 @@ pub fn parse_return_value(
         return Err(STATUS_INVALID_ARGS);
     }
     if optind == args.len() {
-        Ok(parser.get_last_status())
+        Ok(Some(parser.get_last_status()))
     } else {
         match fish_wcstoi(args[optind]) {
-            Ok(i) => Ok(i),
+            Ok(i) => Ok(Some(i)),
             Err(_e) => {
                 streams
                     .err
                     .append(wgettext_fmt!(BUILTIN_ERR_NOT_NUMBER, cmd, args[1]));
                 builtin_print_error_trailer(parser, streams.err, cmd);
-                return Err(STATUS_INVALID_ARGS);
+                Err(STATUS_INVALID_ARGS)
             }
         }
     }

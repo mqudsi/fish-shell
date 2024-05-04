@@ -52,7 +52,7 @@ trait StringSubCommand<'args> {
         args: &mut [&'args wstr],
         parser: &Parser,
         streams: &mut IoStreams,
-    ) -> Result<usize, Option<c_int>> {
+    ) -> Result<usize, NonZeroU8> {
         let cmd = args[0];
         let mut args_read = Vec::with_capacity(args.len());
         args_read.extend_from_slice(args);
@@ -73,7 +73,7 @@ trait StringSubCommand<'args> {
                     let retval = self.parse_opt(cmd, c, w.woptarg);
                     if let Err(e) = retval {
                         e.print_error(&args_read, parser, streams, w.woptarg, w.woptind);
-                        return Err(e.retval());
+                        return Err(e.retval().unwrap_err());
                     }
                 }
             }
@@ -89,7 +89,7 @@ trait StringSubCommand<'args> {
         optind: &mut usize,
         args: &[&'args wstr],
         streams: &mut IoStreams,
-    ) -> Option<c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         STATUS_CMD_OK
     }
 
@@ -100,14 +100,14 @@ trait StringSubCommand<'args> {
         streams: &mut IoStreams,
         optind: &mut usize,
         args: &[&'args wstr],
-    ) -> Option<c_int>;
+    ) -> Result<Option<()>, NonZeroU8>;
 
     fn run(
         &mut self,
         parser: &Parser,
         streams: &mut IoStreams,
         args: &mut [&'args wstr],
-    ) -> Option<c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         if args.len() >= 3 && (args[2] == "-h" || args[2] == "--help") {
             let string_dash_subcmd = WString::from(args[0]) + L!("-") + args[1];
             builtin_print_help(parser, streams, &string_dash_subcmd);
@@ -116,11 +116,7 @@ trait StringSubCommand<'args> {
 
         let args = &mut args[1..];
 
-        let mut optind = match self.parse_opts(args, parser, streams) {
-            Ok(optind) => optind,
-            Err(retval) => return retval,
-        };
-
+        let mut optind = self.parse_opts(args, parser, streams)?;
         let retval = self.take_args(&mut optind, args, streams);
         if retval != STATUS_CMD_OK {
             return retval;
@@ -128,7 +124,7 @@ trait StringSubCommand<'args> {
 
         if streams.stdin_is_directly_redirected && args.len() > optind {
             string_error!(streams, BUILTIN_ERR_TOO_MANY_ARGUMENTS, args[0]);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
 
         return self.handle(parser, streams, &mut optind, args);
@@ -222,8 +218,8 @@ impl StringError {
         }
     }
 
-    fn retval(&self) -> Option<c_int> {
-        STATUS_INVALID_ARGS
+    fn retval(&self) -> Result<Option<()>, NonZeroU8> {
+Err(STATUS_INVALID_ARGS)
     }
 }
 
@@ -278,7 +274,7 @@ fn arguments<'iter, 'args>(
 }
 
 /// The string builtin, for manipulating strings.
-pub fn string(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
+pub fn string(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let argc = args.len();
 
@@ -287,7 +283,7 @@ pub fn string(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
             .err
             .append(wgettext_fmt!(BUILTIN_ERR_MISSING_SUBCMD, cmd));
         builtin_print_error_trailer(parser, streams.err, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     if args[1] == "-h" || args[1] == "--help" {
@@ -336,7 +332,7 @@ pub fn string(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                 .err
                 .append(wgettext_fmt!(BUILTIN_ERR_INVALID_SUBCMD, cmd, args[0]));
             builtin_print_error_trailer(parser, streams.err, cmd);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
     }
 }

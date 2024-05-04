@@ -8,7 +8,7 @@ struct command_cmd_opts_t {
     find_path: bool,
 }
 
-pub fn r#command(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn r#command(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let print_hints = false;
@@ -37,11 +37,11 @@ pub fn r#command(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => {
                 panic!("unexpected retval from wgeopter.next()");
@@ -52,7 +52,7 @@ pub fn r#command(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
     // Quiet implies find_path.
     if !opts.find_path && !opts.all && !opts.quiet {
         builtin_print_help(parser, streams, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     let mut res = false;
@@ -82,6 +82,6 @@ pub fn r#command(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
     if res {
         STATUS_CMD_OK
     } else {
-        STATUS_CMD_UNKNOWN
+        Err(STATUS_CMD_UNKNOWN)
     }
 }

@@ -25,7 +25,11 @@ fn run_one_test_test_mbracket(expected: i32, lst: &[&str], bracket: bool) -> boo
     let io_chain = IoChain::new();
     let mut streams = IoStreams::new(&mut out, &mut err, &io_chain);
 
-    let result: Option<i32> = builtin_test(parser, &mut streams, &mut argv);
+    let result: Option<i32> = match builtin_test(parser, &mut streams, &mut argv) {
+        Ok(Some(())) => Some(0),
+        Ok(None) => None,
+        Err(nz) => Some(nz.get().into()),
+    };
 
     if result != Some(expected) {
         let got = match result {
@@ -59,7 +63,7 @@ fn test_test_brackets() {
     let args1 = &mut [L!("["), L!("foo")];
     assert_eq!(
         builtin_test(parser, &mut streams, args1),
-        STATUS_INVALID_ARGS
+Err(STATUS_INVALID_ARGS)
     );
 
     let args2 = &mut [L!("["), L!("foo"), L!("]")];
@@ -68,7 +72,7 @@ fn test_test_brackets() {
     let args3 = &mut [L!("["), L!("foo"), L!("]"), L!("bar")];
     assert_eq!(
         builtin_test(parser, &mut streams, args3),
-        STATUS_INVALID_ARGS
+Err(STATUS_INVALID_ARGS)
     );
 }
 

@@ -39,6 +39,7 @@ use once_cell::sync::Lazy;
 use printf_compat::sprintf;
 use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::{CStr, OsStr};
+use std::num::NonZeroU8;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::os::unix::prelude::OsStrExt;
 use std::pin::Pin;
@@ -455,10 +456,10 @@ impl Parser {
         eprintf!("%s\n", backtrace_and_desc);
 
         // Set a valid status.
-        self.set_last_statuses(Statuses::just(STATUS_ILLEGAL_CMD.unwrap()));
+        self.set_last_statuses(Statuses::just(STATUS_ILLEGAL_CMD.get().into()));
         let break_expand = true;
         EvalRes {
-            status: ProcStatus::from_exit_code(STATUS_ILLEGAL_CMD.unwrap()),
+            status: ProcStatus::from_exit_code(STATUS_ILLEGAL_CMD.get().into()),
             break_expand,
             ..Default::default()
         }
@@ -788,6 +789,14 @@ impl Parser {
     }
     pub fn set_last_statuses(&self, s: Statuses) {
         self.vars().set_last_statuses(s)
+    }
+
+    /// Get and set the last proc status as a result
+    pub fn get_last_result(&self) -> Result<Option<()>, NonZeroU8> {
+        match self.vars().get_last_status() {
+            0 => Ok(Some(())),
+            c => Err(NonZeroU8::new(c.try_into().unwrap()).unwrap()),
+        }
     }
 
     /// Cover of vars().set(), which also fires any returned event handlers.

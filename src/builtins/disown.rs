@@ -1,15 +1,11 @@
 // Implementation of the disown builtin.
 
-use super::shared::{builtin_print_help, STATUS_CMD_ERROR, STATUS_INVALID_ARGS};
-use crate::io::IoStreams;
-use crate::parser::Parser;
+use super::prelude::*;
+
 use crate::proc::{add_disowned_job, Job};
 use crate::{
-    builtins::shared::{HelpOnlyCmdOpts, STATUS_CMD_OK},
-    wchar::wstr,
-    wutil::{fish_wcstoi, wgettext_fmt},
+    wutil::{wgettext_fmt},
 };
-use libc::c_int;
 use libc::SIGCONT;
 
 /// Helper for builtin_disown.
@@ -43,14 +39,10 @@ fn disown_job(cmd: &wstr, streams: &mut IoStreams, j: &Job) {
 }
 
 /// Builtin for removing jobs from the job list.
-pub fn disown(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
-    let opts = match HelpOnlyCmdOpts::parse(args, parser, streams) {
-        Ok(opts) => opts,
-        Err(err @ Some(_)) if err != STATUS_CMD_OK => return err,
-        Err(err) => panic!("Illogical exit code from parse_options(): {err:?}"),
-    };
-
+pub fn disown(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
+    let opts = HelpOnlyCmdOpts::parse(args, parser, streams)?;
+
     if opts.print_help {
         builtin_print_help(parser, streams, cmd);
         return STATUS_CMD_OK;
@@ -77,7 +69,7 @@ pub fn disown(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
             streams
                 .err
                 .append(wgettext_fmt!("%ls: There are no suitable jobs\n", cmd));
-            retval = STATUS_CMD_ERROR;
+            retval = Err(STATUS_CMD_ERROR);
         }
     } else {
         let mut jobs = vec![];
@@ -99,7 +91,7 @@ pub fn disown(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                         cmd,
                         arg
                     ));
-                    retval = STATUS_INVALID_ARGS;
+                    retval = Err(STATUS_INVALID_ARGS);
                 }
                 Some(pid) => {
                     if let Some(j) = parser.job_get_from_pid(pid) {
@@ -114,9 +106,7 @@ pub fn disown(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                 }
             }
         }
-        if retval != STATUS_CMD_OK {
-            return retval;
-        }
+        retval?;
 
         // Disown all target jobs.
         for j in jobs {

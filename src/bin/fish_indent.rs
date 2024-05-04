@@ -811,7 +811,7 @@ fn main() {
             'P' => DUMP_PARSE_TREE.store(true),
             'h' => {
                 print_help("fish_indent");
-                std::process::exit(STATUS_CMD_OK.unwrap());
+                std::process::exit(STATUS_CMD_OK.map(|_| 0).unwrap());
             }
             'v' => {
                 printf!(
@@ -822,7 +822,7 @@ fn main() {
                         fish::BUILD_VERSION
                     )
                 );
-                std::process::exit(STATUS_CMD_OK.unwrap());
+                std::process::exit(STATUS_CMD_OK.map(|_| 0).unwrap());
             }
             'w' => output_type = OutputType::File,
             'i' => do_indent = false,
@@ -845,7 +845,7 @@ fn main() {
             'o' => {
                 debug_output = Some(w.woptarg.unwrap());
             }
-            _ => std::process::exit(STATUS_CMD_ERROR.unwrap()),
+            _ => std::process::exit(STATUS_CMD_ERROR.get().into()),
         }
     }
 
@@ -883,11 +883,11 @@ fn main() {
                         PROGRAM_NAME.get().unwrap()
                     )
                 );
-                std::process::exit(STATUS_CMD_ERROR.unwrap());
+                std::process::exit(STATUS_CMD_ERROR.get().into());
             }
             match read_file(stdin()) {
                 Ok(s) => src = s,
-                Err(()) => std::process::exit(STATUS_CMD_ERROR.unwrap()),
+                Err(()) => std::process::exit(STATUS_CMD_ERROR.get().into()),
             }
         } else {
             let arg = args[i];
@@ -895,7 +895,7 @@ fn main() {
                 Ok(file) => {
                     match read_file(file) {
                         Ok(s) => src = s,
-                        Err(()) => std::process::exit(STATUS_CMD_ERROR.unwrap()),
+                        Err(()) => std::process::exit(STATUS_CMD_ERROR.get().into()),
                     }
                     output_location = arg;
                 }
@@ -904,7 +904,7 @@ fn main() {
                         "%s",
                         wgettext_fmt!("Opening \"%s\" failed: %s\n", arg, err.to_string())
                     );
-                    std::process::exit(STATUS_CMD_ERROR.unwrap());
+                    std::process::exit(STATUS_CMD_ERROR.get().into());
                 }
             }
         }
@@ -949,7 +949,7 @@ fn main() {
                                 err.to_string()
                             )
                         );
-                        std::process::exit(STATUS_CMD_ERROR.unwrap());
+                        std::process::exit(STATUS_CMD_ERROR.get().into());
                     }
                 }
             }

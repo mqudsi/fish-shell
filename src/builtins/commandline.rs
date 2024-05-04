@@ -174,7 +174,7 @@ fn write_part(
 }
 
 /// The commandline builtin. It is used for specifying a new value for the commandline.
-pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
+pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let rstate = commandline_get_state();
 
     let mut buffer_part = None;
@@ -250,7 +250,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
                         wgettext!("--tokens options are mutually exclusive")
                     ));
                     builtin_print_error_trailer(parser, streams.err, cmd);
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
                 token_mode = Some(match c {
                     'x' => TokenMode::Expanded,
@@ -278,11 +278,11 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, w.argv[w.woptind - 1], true);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, w.argv[w.woptind - 1], true);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => panic!(),
         }
@@ -307,12 +307,12 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
         {
             streams.err.append(wgettext_fmt!(BUILTIN_ERR_COMBO, cmd));
             builtin_print_error_trailer(parser, streams.err, cmd);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
 
         if positional_args == 0 {
             builtin_missing_argument(parser, streams, cmd, L!("--function"), true);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
 
         type rl = ReadlineCmd;
@@ -322,7 +322,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
                     .err
                     .append(wgettext_fmt!("%ls: Unknown input function '%ls'", cmd, arg));
                 builtin_print_error_trailer(parser, streams.err, cmd);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             };
             // Don't enqueue a repaint if we're currently in the middle of one,
             // because that's an infinite loop.
@@ -362,7 +362,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
             .err
             .append(wgettext_fmt!(BUILTIN_ERR_TOO_MANY_ARGUMENTS, cmd));
         builtin_print_error_trailer(parser, streams.err, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     if (search_mode || line_mode || cursor_mode || paging_mode) && positional_args > 1 {
@@ -370,7 +370,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
             .err
             .append(wgettext_fmt!(BUILTIN_ERR_TOO_MANY_ARGUMENTS, cmd));
         builtin_print_error_trailer(parser, streams.err, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     if (buffer_part.is_some() || token_mode.is_some() || cut_at_cursor)
@@ -380,7 +380,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
     {
         streams.err.append(wgettext_fmt!(BUILTIN_ERR_COMBO, cmd));
         builtin_print_error_trailer(parser, streams.err, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     if (token_mode.is_some() || cut_at_cursor) && positional_args != 0 {
@@ -390,12 +390,12 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
             "--cut-at-cursor and --tokens can not be used when setting the commandline"
         ));
         builtin_print_error_trailer(parser, streams.err, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     if append_mode.is_some() && positional_args == 0 {
         // No tokens in insert mode just means we do nothing.
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     // Set default modes.
@@ -415,7 +415,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
         return if commandline_get_state().search_mode {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+            Err(STATUS_CMD_ERROR)
         };
     }
 
@@ -423,7 +423,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
         return if commandline_get_state().pager_mode {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+            Err(STATUS_CMD_ERROR)
         };
     }
 
@@ -432,13 +432,13 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
         return if state.pager_mode && state.pager_fully_disclosed {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+            Err(STATUS_CMD_ERROR)
         };
     }
 
     if selection_start_mode {
         let Some(selection) = rstate.selection else {
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         };
         streams.out.append(sprintf!("%lu\n", selection.start));
         return STATUS_CMD_OK;
@@ -446,7 +446,7 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
 
     if selection_end_mode {
         let Some(selection) = rstate.selection else {
-            return STATUS_CMD_ERROR;
+            return Err(STATUS_CMD_ERROR);
         };
         streams.out.append(sprintf!("%lu\n", selection.end));
         return STATUS_CMD_OK;
@@ -479,21 +479,21 @@ pub fn commandline(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr])
                 .append(L!(": Can not set commandline in non-interactive mode\n"));
             builtin_print_error_trailer(parser, streams.err, cmd);
         }
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     if is_valid {
         if current_buffer.is_empty() {
-            return Some(1);
+            return Err(NonZeroU8::new(1).unwrap());
         }
         let res = parse_util_detect_errors(current_buffer, None, /*accept_incomplete=*/ true);
         return match res {
             Ok(()) => STATUS_CMD_OK,
             Err(err) => {
                 if err.contains(ParserTestErrorBits::INCOMPLETE) {
-                    Some(2)
+                    Err(NonZeroU8::new(2).unwrap())
                 } else {
-                    STATUS_CMD_ERROR
+                    Err(STATUS_CMD_ERROR)
                 }
             }
         };

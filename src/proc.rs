@@ -34,6 +34,7 @@ use printf_compat::sprintf;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::fs;
 use std::io::{Read, Write};
+use std::num::NonZeroU8;
 use std::os::fd::RawFd;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, AtomicU8, Ordering};
@@ -189,6 +190,15 @@ impl ProcStatus {
         ProcStatus::new(Self::w_exitcode(ret, 0 /* sig */), false)
     }
 
+    /// Construct from a builtin return value
+    pub fn from_result(result: Result<(), NonZeroU8>) -> ProcStatus {
+        let code = match result {
+            Ok(()) => 0,
+            Err(c) => c.get() as i32,
+        };
+        ProcStatus::new(Self::w_exitcode(code, 0 /* sig */), false)
+    }
+
     /// Construct directly from a signal.
     pub fn from_signal(signal: Signal) -> ProcStatus {
         ProcStatus::new(Self::w_exitcode(0 /* ret */, signal.code()), false)
@@ -246,6 +256,26 @@ impl ProcStatus {
         } else {
             panic!("Process is not exited")
         }
+    }
+
+    /// Return the execution status as a Result
+    pub fn status_result(&self) -> Result<(), NonZeroU8> {
+        match self.status_value() {
+            0 => Ok(()),
+            n => Err(NonZeroU8::new(n.try_into().unwrap()).unwrap()),
+        }
+    }
+}
+
+impl From<()> for ProcStatus {
+    fn from(_: ()) -> Self {
+        Self::from_exit_code(0)
+    }
+}
+
+impl From<NonZeroU8> for ProcStatus {
+    fn from(value: NonZeroU8) -> Self {
+        Self::from_exit_code(value.get() as i32)
     }
 }
 

@@ -199,7 +199,7 @@ fn parse_cmd_opts(
     args: &mut [&wstr],
     parser: &Parser,
     streams: &mut IoStreams,
-) -> Option<c_int> {
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
 
     let mut args_read = Vec::with_capacity(args.len());
@@ -219,13 +219,13 @@ fn parse_cmd_opts(
                                 cmd,
                                 arg
                             ));
-                            return STATUS_INVALID_ARGS;
+                            return Err(STATUS_INVALID_ARGS);
                         }
                         _ => {
                             streams
                                 .err
                                 .append(wgettext_fmt!(BUILTIN_ERR_NOT_NUMBER, cmd, arg));
-                            return STATUS_INVALID_ARGS;
+                            return Err(STATUS_INVALID_ARGS);
                         }
                     }
                 };
@@ -242,12 +242,12 @@ fn parse_cmd_opts(
                     _ => unreachable!(),
                 };
                 if !opts.try_set_status_cmd(subcmd, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
             }
             'j' => {
                 if !opts.try_set_status_cmd(STATUS_SET_JOB_CONTROL, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
                 let Ok(job_mode) = w.woptarg.unwrap().try_into() else {
                     streams.err.append(wgettext_fmt!(
@@ -255,38 +255,38 @@ fn parse_cmd_opts(
                         cmd,
                         w.woptarg.unwrap()
                     ));
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 };
                 opts.new_job_control_mode = Some(job_mode);
             }
             IS_FULL_JOB_CTRL_SHORT => {
                 if !opts.try_set_status_cmd(STATUS_IS_FULL_JOB_CTRL, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
             }
             IS_INTERACTIVE_JOB_CTRL_SHORT => {
                 if !opts.try_set_status_cmd(STATUS_IS_INTERACTIVE_JOB_CTRL, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
             }
             IS_NO_JOB_CTRL_SHORT => {
                 if !opts.try_set_status_cmd(STATUS_IS_NO_JOB_CTRL, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
             }
             FISH_PATH_SHORT => {
                 if !opts.try_set_status_cmd(STATUS_FISH_PATH, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
             }
             'h' => opts.print_help = true,
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, args[w.woptind - 1], false);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, args[w.woptind - 1], false);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => panic!("unexpected retval from wgetopt_long"),
         }
@@ -297,16 +297,13 @@ fn parse_cmd_opts(
     return STATUS_CMD_OK;
 }
 
-pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
+pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let argc = args.len();
 
     let mut opts = StatusCmdOpts::default();
     let mut optind = 0usize;
-    let retval = parse_cmd_opts(&mut opts, &mut optind, args, parser, streams);
-    if retval != STATUS_CMD_OK {
-        return retval;
-    }
+    parse_cmd_opts(&mut opts, &mut optind, args, parser, streams)?;
 
     if opts.print_help {
         builtin_print_help(parser, streams, cmd);
@@ -319,7 +316,7 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
         match StatusCmd::from_wstr(args[optind].to_string().as_str()) {
             Some(s) => {
                 if !opts.try_set_status_cmd(s, streams) {
-                    return STATUS_CMD_ERROR;
+                    return Err(STATUS_CMD_ERROR);
                 }
                 optind += 1;
             }
@@ -327,7 +324,7 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                 streams
                     .err
                     .append(wgettext_fmt!(BUILTIN_ERR_INVALID_SUBCMD, cmd, args[1]));
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
         }
     }
@@ -368,7 +365,7 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                             0,
                             args.len()
                         ));
-                        return STATUS_INVALID_ARGS;
+                        return Err(STATUS_INVALID_ARGS);
                     }
                     j
                 }
@@ -381,7 +378,7 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                             1,
                             args.len()
                         ));
-                        return STATUS_INVALID_ARGS;
+                        return Err(STATUS_INVALID_ARGS);
                     }
                     let Ok(new_mode) = args[0].try_into() else {
                         streams.err.append(wgettext_fmt!(
@@ -389,7 +386,7 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                             cmd,
                             args[0]
                         ));
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     };
                     new_mode
                 }
@@ -406,19 +403,22 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                     1,
                     args.len()
                 ));
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             use TestFeatureRetVal::*;
-            let mut retval = Some(TEST_FEATURE_NOT_RECOGNIZED as c_int);
+            let mut retval = TEST_FEATURE_NOT_RECOGNIZED as c_int;
             for md in features::METADATA {
                 if md.name == args[0] {
                     retval = match feature_test(md.flag) {
-                        true => Some(TEST_FEATURE_ON as c_int),
-                        false => Some(TEST_FEATURE_OFF as c_int),
+                        true => TEST_FEATURE_ON as c_int,
+                        false => TEST_FEATURE_OFF as c_int,
                     };
                 }
             }
-            return retval;
+            return match retval {
+                0 => STATUS_CMD_OK,
+                n => Err(NonZeroU8::new(n as u8).unwrap()),
+            };
         }
         ref s => {
             if !args.is_empty() {
@@ -429,7 +429,7 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                     0,
                     args.len()
                 ));
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             match s {
                 STATUS_BASENAME | STATUS_DIRNAME | STATUS_FILENAME => {
@@ -462,56 +462,56 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
                     if is_interactive_session() {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_COMMAND_SUB => {
                     if parser.libdata().pods.is_subshell {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_BLOCK => {
                     if parser.is_block() {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_BREAKPOINT => {
                     if parser.is_breakpoint() {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_LOGIN => {
                     if get_login() {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_FULL_JOB_CTRL => {
                     if get_job_control_mode() == JobControl::all {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_INTERACTIVE_JOB_CTRL => {
                     if get_job_control_mode() == JobControl::interactive {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_IS_NO_JOB_CTRL => {
                     if get_job_control_mode() == JobControl::none {
                         return STATUS_CMD_OK;
                     } else {
-                        return STATUS_CMD_ERROR;
+                        return Err(STATUS_CMD_ERROR);
                     }
                 }
                 STATUS_STACK_TRACE => {
@@ -565,5 +565,5 @@ pub fn status(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> O
         }
     };
 
-    return retval;
+    STATUS_CMD_OK
 }

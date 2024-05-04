@@ -287,7 +287,7 @@ fn read_init(parser: &Parser, paths: &ConfigPaths) {
 }
 
 fn run_command_list(parser: &Parser, cmds: &[OsString]) -> i32 {
-    let mut retval = STATUS_CMD_OK;
+    let mut retval = Ok(());
     for cmd in cmds {
         let cmd_wcs = str2wcstring(cmd.as_bytes());
 
@@ -301,16 +301,19 @@ fn run_command_list(parser: &Parser, cmds: &[OsString]) -> i32 {
             // Construct a parsed source ref.
             let ps = Arc::new(ParsedSource::new(cmd_wcs, ast));
             let _ = parser.eval_parsed_source(&ps, &IoChain::new(), None, BlockType::top);
-            retval = STATUS_CMD_OK;
+            retval = Ok(());
         } else {
             let backtrace = parser.get_backtrace(&cmd_wcs, &errors);
             eprintf!("%s", backtrace);
             // XXX: Why is this the return for "unknown command"?
-            retval = STATUS_CMD_UNKNOWN;
+            retval = Err(STATUS_CMD_UNKNOWN);
         }
     }
 
-    retval.unwrap()
+    match retval {
+        Ok(()) => 0,
+        Err(n) => n.get().into()
+    }
 }
 
 fn fish_parse_opt(args: &mut [WString], opts: &mut FishCmdOpts) -> usize {
@@ -608,7 +611,7 @@ fn main() {
     term_copy_modes();
 
     // Stomp the exit status of any initialization commands (issue #635).
-    parser.set_last_statuses(Statuses::just(STATUS_CMD_OK.unwrap()));
+    parser.set_last_statuses(Statuses::just(STATUS_CMD_OK.map(|_| 0).unwrap()));
 
     // TODO: if-let-chains
     if opts.profile_startup_output.is_some() && opts.profile_startup_output != opts.profile_output {
@@ -700,7 +703,7 @@ fn main() {
     }
 
     let exit_status = if res != 0 {
-        STATUS_CMD_UNKNOWN.unwrap()
+        STATUS_CMD_UNKNOWN.get().into()
     } else {
         parser.get_last_status()
     };

@@ -14,14 +14,9 @@ use std::{os::fd::AsRawFd, sync::Arc};
 
 // The cd builtin. Changes the current directory to the one specified or to $HOME if none is
 // specified. The directory can be relative to any directory in the CDPATH variable.
-pub fn cd(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
+pub fn cd(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
-
-    let opts = match HelpOnlyCmdOpts::parse(args, parser, streams) {
-        Ok(opts) => opts,
-        Err(err @ Some(_)) if err != STATUS_CMD_OK => return err,
-        Err(err) => panic!("Illogical exit code from parse_options(): {err:?}"),
-    };
+    let opts = HelpOnlyCmdOpts::parse(args, parser, streams)?;
 
     if opts.print_help {
         builtin_print_help(parser, streams, cmd);
@@ -43,7 +38,7 @@ pub fn cd(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Optio
                 streams
                     .err
                     .append(wgettext_fmt!("%ls: Could not find home directory\n", cmd));
-                return STATUS_CMD_ERROR;
+                return Err(STATUS_CMD_ERROR);
             }
         }
     };
@@ -58,7 +53,7 @@ pub fn cd(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Optio
         if !parser.is_interactive() {
             streams.err.append(parser.current_line());
         };
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     let pwd = vars.get_pwd_slash();
@@ -75,7 +70,7 @@ pub fn cd(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Optio
             streams.err.append(parser.current_line());
         }
 
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     let mut best_errno = 0;
@@ -180,5 +175,5 @@ pub fn cd(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Optio
         streams.err.append(parser.current_line());
     }
 
-    return STATUS_CMD_ERROR;
+    return Err(STATUS_CMD_ERROR);
 }

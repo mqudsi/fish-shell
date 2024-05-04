@@ -2289,7 +2289,7 @@ impl ReaderData {
             rl::Exit => {
                 // This is by definition a successful exit, override the status
                 self.parser()
-                    .set_last_statuses(Statuses::just(STATUS_CMD_OK.unwrap()));
+                    .set_last_statuses(Statuses::just(STATUS_CMD_OK.map(|_| 0).unwrap()));
                 self.exit_loop_requested = true;
                 check_exit_loop_maybe_warning(Some(self));
             }
@@ -2302,7 +2302,7 @@ impl ReaderData {
                 } else if c == rl::DeleteOrExit && el.is_empty() {
                     // This is by definition a successful exit, override the status
                     self.parser()
-                        .set_last_statuses(Statuses::just(STATUS_CMD_OK.unwrap()));
+                        .set_last_statuses(Statuses::just(STATUS_CMD_OK.map(|_| 0).unwrap()));
                     self.exit_loop_requested = true;
                     check_exit_loop_maybe_warning(Some(self));
                 }
@@ -4272,7 +4272,7 @@ fn expand_replacer(
         Some(&mut outputs),
         /*apply_exit_status=*/ false,
     );
-    if ret != STATUS_CMD_OK.unwrap() {
+    if ret != STATUS_CMD_OK.map(|_| 0).unwrap() {
         return None;
     }
     let result = join_strings(&outputs, '\n');
@@ -4690,7 +4690,7 @@ impl ReaderData {
 
         let ret = exec_subshell(&cmd, parser, None, /*apply_exit_status=*/ false);
 
-        ret == STATUS_CMD_OK.unwrap()
+        ret == STATUS_CMD_OK.map(|_| 0).unwrap()
     }
 
     // Add the current command line contents to history.

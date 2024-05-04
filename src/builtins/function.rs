@@ -75,7 +75,7 @@ fn parse_cmd_opts(
     argv: &mut [&wstr],
     parser: &Parser,
     streams: &mut IoStreams,
-) -> Option<c_int> {
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = L!("function");
     let print_hints = false;
     let mut handling_named_arguments = false;
@@ -97,7 +97,7 @@ fn parse_cmd_opts(
                         cmd,
                         woptarg
                     ));
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
             }
             'd' => {
@@ -110,7 +110,7 @@ fn parse_cmd_opts(
                         cmd,
                         w.woptarg.unwrap()
                     ));
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 };
                 opts.events.push(EventDescription::Signal { signal });
             }
@@ -120,7 +120,7 @@ fn parse_cmd_opts(
                     streams
                         .err
                         .append(wgettext_fmt!(BUILTIN_ERR_VARNAME, cmd, name));
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
                 opts.events.push(EventDescription::Variable { name });
             }
@@ -143,7 +143,7 @@ fn parse_cmd_opts(
                             "%ls: calling job for event handler not found",
                             cmd
                         ));
-                        return STATUS_INVALID_ARGS;
+                        return Err(STATUS_INVALID_ARGS);
                     }
                     e = EventDescription::CallerExit { caller_id };
                 } else if opt == 'p' && woptarg == "%self" {
@@ -157,7 +157,7 @@ fn parse_cmd_opts(
                             cmd,
                             woptarg
                         ));
-                        return STATUS_INVALID_ARGS;
+                        return Err(STATUS_INVALID_ARGS);
                     }
                     let pid = pid.unwrap();
                     if opt == 'p' {
@@ -189,7 +189,7 @@ fn parse_cmd_opts(
                     streams
                         .err
                         .append(wgettext_fmt!(BUILTIN_ERR_VARNAME, cmd, woptarg));
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
                 opts.inherit_vars.push(woptarg.to_owned());
             }
@@ -198,11 +198,11 @@ fn parse_cmd_opts(
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             other => {
                 panic!("Unexpected retval from wgetopt_long: {}", other);
@@ -219,13 +219,13 @@ fn validate_function_name(
     function_name: &mut WString,
     cmd: &wstr,
     streams: &mut IoStreams,
-) -> Option<c_int> {
+) -> Result<Option<()>, NonZeroU8> {
     if argv.len() < 2 {
         // This is currently impossible but let's be paranoid.
         streams
             .err
             .append(wgettext_fmt!("%ls: function name required", cmd));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
     *function_name = argv[1].to_owned();
     if !valid_func_name(function_name) {
@@ -234,7 +234,7 @@ fn validate_function_name(
             cmd,
             function_name,
         ));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
     if parser_keywords_is_reserved(function_name) {
         streams.err.append(wgettext_fmt!(
@@ -242,7 +242,7 @@ fn validate_function_name(
             cmd,
             function_name
         ));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
     STATUS_CMD_OK
 }
@@ -255,7 +255,7 @@ pub fn function(
     streams: &mut IoStreams,
     c_args: &mut [&wstr],
     func_node: NodeRef<BlockStatement>,
-) -> Option<c_int> {
+) -> Result<Option<()>, NonZeroU8> {
     // The wgetopt function expects 'function' as the first argument. Make a new vec with
     // that property. This is needed because this builtin has a different signature than the other
     // builtins.
@@ -266,18 +266,12 @@ pub fn function(
 
     // A valid function name has to be the first argument.
     let mut function_name = WString::new();
-    let mut retval = validate_function_name(argv, &mut function_name, cmd, streams);
-    if retval != STATUS_CMD_OK {
-        return retval;
-    }
+    validate_function_name(argv, &mut function_name, cmd, streams)?;
     let argv = &mut argv[1..];
 
     let mut opts = FunctionCmdOpts::default();
     let mut optind = 0;
-    retval = parse_cmd_opts(&mut opts, &mut optind, argv, parser, streams);
-    if retval != STATUS_CMD_OK {
-        return retval;
-    }
+    parse_cmd_opts(&mut opts, &mut optind, argv, parser, streams)?;
 
     if opts.print_help {
         builtin_print_error_trailer(parser, streams.err, cmd);
@@ -292,7 +286,7 @@ pub fn function(
                     streams
                         .err
                         .append(wgettext_fmt!(BUILTIN_ERR_VARNAME, cmd, arg));
-                    return STATUS_INVALID_ARGS;
+                    return Err(STATUS_INVALID_ARGS);
                 }
                 opts.named_arguments.push(arg.to_owned());
             }
@@ -302,7 +296,7 @@ pub fn function(
                 cmd,
                 argv[optind],
             ));
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
     }
 

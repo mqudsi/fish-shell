@@ -22,7 +22,7 @@ impl StringSubCommand<'_> for Transform {
         streams: &mut IoStreams,
         optind: &mut usize,
         args: &[&wstr],
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         let mut n_transformed = 0usize;
 
         for (arg, want_newline) in arguments(args, optind, streams) {
@@ -43,7 +43,7 @@ impl StringSubCommand<'_> for Transform {
         if n_transformed > 0 {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+Err(STATUS_CMD_ERROR)
         }
     }
 }

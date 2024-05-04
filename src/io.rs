@@ -1,4 +1,4 @@
-use crate::builtins::shared::{STATUS_CMD_ERROR, STATUS_CMD_OK, STATUS_READ_TOO_MUCH};
+use crate::builtins::shared::{STATUS_CMD_ERROR, STATUS_READ_TOO_MUCH};
 use crate::common::{str2wcstring, wcs2string, EMPTY_STRING};
 use crate::fd_monitor::{
     Callback, FdMonitor, FdMonitorItem, FdMonitorItemId, ItemAction, ItemWakeReason,
@@ -22,6 +22,7 @@ use nix::fcntl::OFlag;
 use nix::sys::stat::Mode;
 use std::cell::{RefCell, UnsafeCell};
 use std::io;
+use std::num::NonZeroU8;
 use std::os::fd::{AsRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -768,11 +769,11 @@ impl OutputStream {
 
     /// Flush any unwritten data to the underlying device, and return an error code.
     /// A 0 code indicates success. The base implementation returns 0.
-    pub fn flush_and_check_error(&mut self) -> libc::c_int {
+    pub fn flush_and_check_error(&mut self) -> Result<(), NonZeroU8> {
         match self {
             OutputStream::Fd(stream) => stream.flush_and_check_error(),
             OutputStream::Buffered(stream) => stream.flush_and_check_error(),
-            OutputStream::Null | OutputStream::String(_) => STATUS_CMD_OK.unwrap(),
+            OutputStream::Null | OutputStream::String(_) => Ok(()),
         }
     }
 
@@ -891,14 +892,13 @@ impl FdOutputStream {
         !self.errored
     }
 
-    fn flush_and_check_error(&mut self) -> libc::c_int {
+    fn flush_and_check_error(&mut self) -> Result<(), NonZeroU8> {
         // Return a generic 1 on any write failure.
         if self.errored {
-            STATUS_CMD_ERROR
+            Err(STATUS_CMD_ERROR)
         } else {
-            STATUS_CMD_OK
+            Ok(())
         }
-        .unwrap()
     }
 }
 
@@ -941,11 +941,11 @@ impl BufferedOutputStream {
     ) -> bool {
         self.buffer.append(&wcs2string(s), typ)
     }
-    fn flush_and_check_error(&mut self) -> libc::c_int {
+    fn flush_and_check_error(&mut self) -> Result<(), NonZeroU8> {
         if self.buffer.discarded() {
-            return STATUS_READ_TOO_MUCH.unwrap();
+            return Err(STATUS_READ_TOO_MUCH)
         }
-        0
+        Ok(())
     }
 }
 

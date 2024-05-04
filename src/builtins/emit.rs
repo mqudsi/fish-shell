@@ -1,15 +1,10 @@
 use super::prelude::*;
 use crate::event;
 
-pub fn emit(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn emit(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
 
-    let opts = match HelpOnlyCmdOpts::parse(argv, parser, streams) {
-        Ok(opts) => opts,
-        Err(err @ Some(_)) if err != STATUS_CMD_OK => return err,
-        Err(err) => panic!("Illogical exit code from parse_options(): {err:?}"),
-    };
-
+    let opts = HelpOnlyCmdOpts::parse(argv, parser, streams)?;
     if opts.print_help {
         builtin_print_help(parser, streams, cmd);
         return STATUS_CMD_OK;
@@ -19,7 +14,7 @@ pub fn emit(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
         streams
             .err
             .append(sprintf!(L!("%ls: expected event name\n"), cmd));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     };
 
     event::fire_generic(

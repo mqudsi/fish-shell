@@ -24,7 +24,7 @@ fn parse_options(
     args: &mut [&wstr],
     parser: &Parser,
     streams: &mut IoStreams,
-) -> Result<(Options, usize), Option<c_int>> {
+) -> Result<(Options, usize), NonZeroU8> {
     let cmd = args[0];
 
     const SHORT_OPTS: &wstr = L!("+:Eens");
@@ -135,12 +135,8 @@ where
 ///
 /// Bash only respects `-n` if it's the first argument. We'll do the same. We also support a new,
 /// fish specific, option `-s` to mean "no spaces".
-pub fn echo(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Option<c_int> {
-    let (opts, optind) = match parse_options(args, parser, streams) {
-        Ok((opts, optind)) => (opts, optind),
-        Err(err @ Some(_)) if err != STATUS_CMD_OK => return err,
-        Err(err) => panic!("Illogical exit code from parse_options(): {err:?}"),
-    };
+pub fn echo(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+    let (opts, optind) = parse_options(args, parser, streams)?;
 
     // The special character \c can be used to indicate no more output.
     let mut output_stopped = false;

@@ -1,23 +1,12 @@
 // Functions for executing the jobs builtin.
 
-use super::shared::{
-    builtin_missing_argument, builtin_print_help, builtin_unknown_option, STATUS_CMD_ERROR,
-    STATUS_INVALID_ARGS,
-};
+use super::prelude::*;
+
 use crate::common::{escape_string, timef, EscapeFlags, EscapeStringStyle};
-use crate::io::IoStreams;
 use crate::job_group::{JobId, MaybeJobId};
-use crate::parser::Parser;
 use crate::proc::{clock_ticks_to_seconds, have_proc_stat, proc_get_jiffies, Job, INVALID_PID};
-use crate::wchar_ext::WExt;
-use crate::wgetopt::{wgetopter_t, wopt, woption, woption_argument_t};
 use crate::wutil::wgettext;
-use crate::{
-    builtins::shared::STATUS_CMD_OK,
-    wchar::{wstr, WString, L},
-    wutil::{fish_wcstoi, wgettext_fmt},
-};
-use libc::c_int;
+use crate::{wchar::L, wutil::wgettext_fmt};
 use printf_compat::sprintf;
 use std::num::NonZeroU32;
 use std::sync::atomic::Ordering;
@@ -138,7 +127,7 @@ const LONG_OPTIONS: &[woption] = &[
 ];
 
 /// The jobs builtin. Used for printing running jobs. Defined in builtin_jobs.c.
-pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let mut found = false;
@@ -169,11 +158,11 @@ pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], true);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], true);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => panic!("unexpected retval from wgetopt_long"),
         }
@@ -187,7 +176,7 @@ pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
                 return STATUS_CMD_OK;
             }
         }
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     if w.woptind < argc {
@@ -201,7 +190,7 @@ pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
                             cmd,
                             arg
                         ));
-                        return STATUS_INVALID_ARGS;
+                        return Err(STATUS_INVALID_ARGS);
                     }
                     Some(job_id) => {
                         let job_id = if job_id == 0 {
@@ -222,7 +211,7 @@ pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
                             cmd,
                             arg
                         ));
-                        return STATUS_INVALID_ARGS;
+                        return Err(STATUS_INVALID_ARGS);
                     }
                     Some(job_id) => {
                         j = parser.job_get_from_pid(job_id);
@@ -239,7 +228,7 @@ pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
                         .err
                         .append(wgettext_fmt!("%ls: No suitable job: %ls\n", cmd, arg));
                 }
-                return STATUS_CMD_ERROR;
+                return Err(STATUS_CMD_ERROR);
             }
         }
     } else {
@@ -259,7 +248,7 @@ pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Opt
                 .out
                 .append(wgettext_fmt!("%ls: There are no jobs\n", argv[0]));
         }
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     STATUS_CMD_OK

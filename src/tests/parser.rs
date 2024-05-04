@@ -650,14 +650,14 @@ fn test_eval_illegal_exit_code() {
     validate!(L!("pwd"), STATUS_CMD_OK.unwrap());
     validate!(
         L!("UNMATCHABLE_WILDCARD*"),
-        STATUS_UNMATCHED_WILDCARD.unwrap()
+        STATUS_UNMATCHED_WILDCARD.unwrap_err()
     );
     validate!(
         L!("UNMATCHABLE_WILDCARD**"),
-        STATUS_UNMATCHED_WILDCARD.unwrap()
+        STATUS_UNMATCHED_WILDCARD.unwrap_err()
     );
-    validate!(L!("?"), STATUS_UNMATCHED_WILDCARD.unwrap());
-    validate!(L!("abc?def"), STATUS_UNMATCHED_WILDCARD.unwrap());
+    validate!(L!("?"), STATUS_UNMATCHED_WILDCARD.unwrap_err());
+    validate!(L!("abc?def"), STATUS_UNMATCHED_WILDCARD.unwrap_err());
     popd();
 }
 

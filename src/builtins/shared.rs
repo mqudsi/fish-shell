@@ -16,7 +16,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::os::fd::FromRawFd;
 use std::sync::Arc;
 
-pub type BuiltinCmd = fn(&Parser, &mut IoStreams, &mut [&wstr]) -> Option<c_int>;
+pub type BuiltinCmd = fn(&Parser, &mut IoStreams, &mut [&wstr]) -> Result<Option<()>, NonZeroU8>;
 
 /// The default prompt for the read command.
 pub const DEFAULT_READ_PROMPT: &wstr =
@@ -77,29 +77,37 @@ pub const FG_MSG: &str = "Send job %d (%ls) to foreground\n";
 
 // Return values (`$status` values for fish scripts) for various situations.
 
-/// The status code used for normal exit in a command.
-pub const STATUS_CMD_OK: Option<c_int> = Some(0);
+/// The status code used for normal exit in a command, mapped to zero.
+pub const STATUS_CMD_OK: Result<Option<()>, NonZeroU8> = Ok(Some(()));
 /// The status code used for failure exit in a command (but not if the args were invalid).
-pub const STATUS_CMD_ERROR: Option<c_int> = Some(1);
+pub const STATUS_CMD_ERROR: NonZeroU8 = nzu8::<1>();
 /// The status code used for invalid arguments given to a command. This is distinct from valid
 /// arguments that might result in a command failure. An invalid args condition is something
 /// like an unrecognized flag, missing or too many arguments, an invalid integer, etc.
-pub const STATUS_INVALID_ARGS: Option<c_int> = Some(2);
+pub const STATUS_INVALID_ARGS: NonZeroU8 = nzu8::<2>();
 
 /// The status code used when a command was not found.
-pub const STATUS_CMD_UNKNOWN: Option<c_int> = Some(127);
+pub const STATUS_CMD_UNKNOWN: NonZeroU8 = nzu8::<127>();
 
 /// The status code used when an external command can not be run.
-pub const STATUS_NOT_EXECUTABLE: Option<c_int> = Some(126);
+pub const STATUS_NOT_EXECUTABLE: NonZeroU8 = nzu8::<126>();
 
 /// The status code used when a wildcard had no matches.
-pub const STATUS_UNMATCHED_WILDCARD: Option<c_int> = Some(124);
+pub const STATUS_UNMATCHED_WILDCARD: NonZeroU8 = nzu8::<124>();
 /// The status code used when illegal command name is encountered.
-pub const STATUS_ILLEGAL_CMD: Option<c_int> = Some(123);
+pub const STATUS_ILLEGAL_CMD: NonZeroU8 = nzu8::<123>();
 /// The status code used when `read` is asked to consume too much data.
-pub const STATUS_READ_TOO_MUCH: Option<c_int> = Some(122);
+pub const STATUS_READ_TOO_MUCH: NonZeroU8 = nzu8::<122>();
 /// The status code when an expansion fails, for example, "$foo["
-pub const STATUS_EXPAND_ERROR: Option<c_int> = Some(121);
+pub const STATUS_EXPAND_ERROR: NonZeroU8 = nzu8::<121>();
+
+// Until we can use .unwrap() in a const declaration:
+const fn nzu8<const C: u8>() -> NonZeroU8 {
+    match C {
+        0 => panic!("Expecting a non-zero value!"),
+        c => unsafe { NonZeroU8::new_unchecked(c) },
+    }
+}
 
 /// Data structure to describe a builtin.
 struct BuiltinData {
@@ -392,7 +400,7 @@ fn cmd_needs_help(cmd: &wstr) -> bool {
 /// Execute a builtin command
 pub fn builtin_run(parser: &Parser, argv: &mut [&wstr], streams: &mut IoStreams) -> ProcStatus {
     if argv.is_empty() {
-        return ProcStatus::from_exit_code(STATUS_INVALID_ARGS.unwrap());
+        return STATUS_INVALID_ARGS.into();
     }
 
     // We can be handed a keyword by the parser as if it was a command. This happens when the user
@@ -400,12 +408,12 @@ pub fn builtin_run(parser: &Parser, argv: &mut [&wstr], streams: &mut IoStreams)
     // handle displaying help for it here.
     if argv.len() == 2 && parse_util_argument_is_help(argv[1]) && cmd_needs_help(argv[0]) {
         builtin_print_help(parser, streams, argv[0]);
-        return ProcStatus::from_exit_code(STATUS_CMD_OK.unwrap());
+        return ().into()
     }
 
     let Some(builtin) = builtin_lookup(argv[0]) else {
         FLOGF!(error, "%s", wgettext_fmt!(UNKNOWN_BUILTIN_ERR_MSG, argv[0]));
-        return ProcStatus::from_exit_code(STATUS_CMD_ERROR.unwrap());
+        return STATUS_CMD_ERROR.into();
     };
 
     let builtin_ret = (builtin.func)(parser, streams, argv);
@@ -417,39 +425,16 @@ pub fn builtin_run(parser: &Parser, argv: &mut [&wstr], streams: &mut IoStreams)
     // Resolve our status code.
     // If the builtin itself produced an error, use that error.
     // Otherwise use any errors from writing to out and writing to err, in that order.
-    let mut code = builtin_ret.unwrap_or(0);
-    if code == 0 {
-        code = out_ret;
-    }
-    if code == 0 {
-        code = err_ret;
-    }
-
-    // The exit code is cast to an 8-bit unsigned integer, so saturate to 255. Otherwise,
-    // multiples of 256 are reported as 0.
-    if code > 255 {
-        code = 255;
-    }
+    let code = builtin_ret
+        .err()
+        .or(out_ret.err())
+        .or(err_ret.err())
+        .map(|c| c.get() as i32)
+        .unwrap_or(0);
 
     // Handle the case of an empty status.
-    if code == 0 && builtin_ret.is_none() {
+    if code == 0 && builtin_ret.is_ok() {
         return ProcStatus::empty();
-    }
-    if code < 0 {
-        // If the code is below 0, constructing a proc_status_t
-        // would assert() out, which is a terrible failure mode
-        // So instead, what we do is we get a positive code,
-        // and we avoid 0.
-        FLOGF!(
-            warning,
-            "builtin %ls returned invalid exit code %d",
-            argv[0],
-            code
-        );
-        code = ((256 + code) % 256).abs();
-        if code == 0 {
-            code = 255;
-        }
     }
 
     ProcStatus::from_exit_code(code)
@@ -645,7 +630,7 @@ impl HelpOnlyCmdOpts {
         args: &mut [&wstr],
         parser: &Parser,
         streams: &mut IoStreams,
-    ) -> Result<Self, Option<c_int>> {
+    ) -> Result<Self, NonZeroU8> {
         let cmd = args[0];
         let print_hints = true;
 
@@ -826,12 +811,13 @@ impl<'args> Iterator for Arguments<'args, '_> {
 
 /// A generic builtin that only supports showing a help message. This is only a placeholder that
 /// prints the help message. Useful for commands that live in the parser.
-fn builtin_generic(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+fn builtin_generic(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let argc = argv.len();
-    let opts = match HelpOnlyCmdOpts::parse(argv, parser, streams) {
-        Ok(opts) => opts,
-        Err(err) => return err,
-    };
+    let opts = HelpOnlyCmdOpts::parse(argv, parser, streams)?;
 
     if opts.print_help {
         builtin_print_help(parser, streams, argv[0]);
@@ -842,10 +828,10 @@ fn builtin_generic(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr])
     // just print help.
     if argc == 1 || argv[0] == "time" {
         builtin_print_help(parser, streams, argv[0]);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
-    STATUS_CMD_ERROR
+    Err(STATUS_CMD_ERROR)
 }
 
 /// This function handles both the 'continue' and the 'break' builtins that are used for loop
@@ -854,14 +840,14 @@ fn builtin_break_continue(
     parser: &Parser,
     streams: &mut IoStreams,
     argv: &mut [&wstr],
-) -> Option<c_int> {
+) -> Result<Option<()>, NonZeroU8> {
     let is_break = argv[0] == "break";
     let argc = argv.len();
 
     if argc != 1 {
         let error_message = wgettext_fmt!(BUILTIN_ERR_UNKNOWN, argv[0], argv[1]);
         builtin_print_help_error(parser, streams, argv[0], &error_message);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     // Paranoia: ensure we have a real loop.
@@ -879,7 +865,7 @@ fn builtin_break_continue(
     if !has_loop {
         let error_message = wgettext_fmt!("%ls: Not inside of loop\n", argv[0]);
         builtin_print_help_error(parser, streams, argv[0], &error_message);
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     // Mark the status in the libdata.
@@ -896,7 +882,7 @@ fn builtin_breakpoint(
     parser: &Parser,
     streams: &mut IoStreams,
     argv: &mut [&wstr],
-) -> Option<c_int> {
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     if argv.len() != 1 {
         streams.err.append(wgettext_fmt!(
@@ -905,12 +891,12 @@ fn builtin_breakpoint(
             0,
             argv.len() - 1
         ));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     // If we're not interactive then we can't enter the debugger. So treat this command as a no-op.
     if !parser.is_interactive() {
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     // Ensure we don't allow creating a breakpoint at an interactive prompt. There may be a simpler
@@ -924,7 +910,7 @@ fn builtin_breakpoint(
                 "%ls: Command not valid at an interactive prompt\n",
                 cmd,
             ));
-            return STATUS_ILLEGAL_CMD;
+            return Err(STATUS_ILLEGAL_CMD);
         }
     }
 
@@ -932,18 +918,30 @@ fn builtin_breakpoint(
     let io_chain = &streams.io_chain;
     reader_read(parser, STDIN_FILENO, io_chain);
     parser.pop_block(bpb);
-    Some(parser.get_last_status())
+    parser.get_last_result()
 }
 
-fn builtin_true(_parser: &Parser, _streams: &mut IoStreams, _argv: &mut [&wstr]) -> Option<c_int> {
+fn builtin_true(
+    _parser: &Parser,
+    _streams: &mut IoStreams,
+    _argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     STATUS_CMD_OK
 }
 
-fn builtin_false(_parser: &Parser, _streams: &mut IoStreams, _argv: &mut [&wstr]) -> Option<c_int> {
-    STATUS_CMD_ERROR
+fn builtin_false(
+    _parser: &Parser,
+    _streams: &mut IoStreams,
+    _argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
+    Err(STATUS_CMD_ERROR)
 }
 
-fn builtin_gettext(_parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+fn builtin_gettext(
+    _parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     for arg in &argv[1..] {
         streams.out.append(wgettext_str(arg));
     }

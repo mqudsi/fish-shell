@@ -582,7 +582,7 @@ impl<'a, 'b> builtin_printf_state_t<'a, 'b> {
 
         // We set the exit code to error, because one occurred,
         // but we don't do an early exit so we still print what we can.
-        self.exit_code = STATUS_CMD_ERROR.unwrap();
+        self.exit_code = STATUS_CMD_ERROR.get().into();
     }
 
     fn fatal_error<Str: AsRef<wstr>>(&mut self, errstr: Str) {
@@ -604,7 +604,7 @@ impl<'a, 'b> builtin_printf_state_t<'a, 'b> {
             self.streams.err.push('\n');
         }
 
-        self.exit_code = STATUS_CMD_ERROR.unwrap();
+        self.exit_code = STATUS_CMD_ERROR.get().into();
         self.early_exit = true;
     }
 
@@ -761,19 +761,19 @@ impl<'a, 'b> builtin_printf_state_t<'a, 'b> {
 }
 
 /// The printf builtin.
-pub fn printf(_parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn printf(_parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let mut argc = argv.len();
 
     // Rebind argv as immutable slice (can't rearrange its elements), skipping the command name.
     let mut argv: &[&wstr] = &argv[1..];
     argc -= 1;
     if argc < 1 {
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     let mut state = builtin_printf_state_t {
         streams,
-        exit_code: STATUS_CMD_OK.unwrap(),
+        exit_code: 0,
         early_exit: false,
         buff: WString::new(),
         locale: get_numeric_locale(),
@@ -793,5 +793,8 @@ pub fn printf(_parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> 
             break;
         }
     }
-    return Some(state.exit_code);
+    match state.exit_code {
+        0 => STATUS_CMD_OK,
+        n => Err(NonZeroU8::new(n.try_into().unwrap()).unwrap()),
+    }
 }

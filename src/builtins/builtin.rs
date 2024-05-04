@@ -6,7 +6,7 @@ struct builtin_cmd_opts_t {
     list_names: bool,
 }
 
-pub fn r#builtin(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Option<c_int> {
+pub fn r#builtin(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let print_hints = false;
@@ -30,11 +30,11 @@ pub fn r#builtin(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
             }
             ':' => {
                 builtin_missing_argument(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 builtin_unknown_option(parser, streams, cmd, argv[w.woptind - 1], print_hints);
-                return STATUS_INVALID_ARGS;
+                return Err(STATUS_INVALID_ARGS);
             }
             _ => {
                 panic!("unexpected retval from wgeopter.next()");
@@ -48,7 +48,7 @@ pub fn r#builtin(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
             cmd,
             wgettext!("--query and --names are mutually exclusive")
         ));
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     // If we don't have either, we print our help.
@@ -56,7 +56,7 @@ pub fn r#builtin(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
     // the other decorator/builtins do.
     if !opts.query && !opts.list_names {
         builtin_print_help(parser, streams, cmd);
-        return STATUS_INVALID_ARGS;
+        return Err(STATUS_INVALID_ARGS);
     }
 
     if opts.query {
@@ -66,7 +66,7 @@ pub fn r#builtin(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -
                 return STATUS_CMD_OK;
             }
         }
-        return STATUS_CMD_ERROR;
+        return Err(STATUS_CMD_ERROR);
     }
 
     if opts.list_names {

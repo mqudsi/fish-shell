@@ -407,7 +407,7 @@ fn append_overflow_error(
         error.text = wgettext!("Expansion produced too many results").to_owned();
         errors.push(error);
     }
-    ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap())
+    ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into())
 }
 
 /// Test if the specified string does not contain character which can not be used inside a quoted
@@ -626,7 +626,7 @@ fn expand_variables(
                 errors,
             );
         }
-        return ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap());
+        return ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into());
     }
 
     // Do a dirty hack to make sliced history fast (#4650). We expand from either a variable, or a
@@ -678,7 +678,7 @@ fn expand_variables(
                         append_syntax_error!(errors, slice_start + bad_pos, "Invalid index value");
                     }
                 }
-                return ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap());
+                return ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into());
             }
         }
     }
@@ -856,7 +856,7 @@ fn expand_braces(
 
     if syntax_error {
         append_syntax_error!(errors, SOURCE_LOCATION_UNKNOWN, "Mismatched braces");
-        return ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap());
+        return ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into());
     }
 
     let Some(brace_begin) = brace_begin else {
@@ -942,7 +942,7 @@ pub fn expand_cmdsubst(
     ) {
         -1 => {
             append_syntax_error!(errors, SOURCE_LOCATION_UNKNOWN, "Mismatched parenthesis");
-            return ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap());
+            return ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into());
         }
         0 => {
             if !out.add(input) {
@@ -961,28 +961,28 @@ pub fn expand_cmdsubst(
     if subshell_status != 0 {
         // TODO: Ad-hoc switch, how can we enumerate the possible errors more safely?
         let err = match subshell_status {
-            _ if subshell_status == STATUS_READ_TOO_MUCH.unwrap() => {
+            _ if subshell_status == STATUS_READ_TOO_MUCH.get().into() => {
                 wgettext!("Too much data emitted by command substitution so it was discarded")
             }
             // TODO: STATUS_CMD_ERROR is overused and too generic. We shouldn't have to test things
             // to figure out what error to show after we've already been given an error code.
-            _ if subshell_status == STATUS_CMD_ERROR.unwrap() => {
+            _ if subshell_status == STATUS_CMD_ERROR.get().into() => {
                 if ctx.parser().is_eval_depth_exceeded() {
                     wgettext!("Unable to evaluate string substitution")
                 } else {
                     wgettext!("Too many active file descriptors")
                 }
             }
-            _ if subshell_status == STATUS_CMD_UNKNOWN.unwrap() => {
+            _ if subshell_status == STATUS_CMD_UNKNOWN.get().into() => {
                 wgettext!("Unknown command")
             }
-            _ if subshell_status == STATUS_ILLEGAL_CMD.unwrap() => {
+            _ if subshell_status == STATUS_ILLEGAL_CMD.get().into() => {
                 wgettext!("Commandname was invalid")
             }
-            _ if subshell_status == STATUS_NOT_EXECUTABLE.unwrap() => {
+            _ if subshell_status == STATUS_NOT_EXECUTABLE.get().into() => {
                 wgettext!("Command not executable")
             }
-            _ if subshell_status == STATUS_INVALID_ARGS.unwrap() => {
+            _ if subshell_status == STATUS_INVALID_ARGS.get().into() => {
                 // TODO: Also overused
                 // This is sent for:
                 // invalid redirections or pipes (like `<&foo`),
@@ -991,11 +991,11 @@ pub fn expand_cmdsubst(
                 // time in a background job.
                 wgettext!("Invalid arguments")
             }
-            _ if subshell_status == STATUS_EXPAND_ERROR.unwrap() => {
+            _ if subshell_status == STATUS_EXPAND_ERROR.get().into() => {
                 // Sent in `for $foo in ...` if $foo expands to more than one word
                 wgettext!("Expansion error")
             }
-            _ if subshell_status == STATUS_UNMATCHED_WILDCARD.unwrap() => {
+            _ if subshell_status == STATUS_UNMATCHED_WILDCARD.get().into() => {
                 // Sent in `for $foo in ...` if $foo expands to more than one word
                 wgettext!("Unmatched wildcard")
             }
@@ -1027,7 +1027,7 @@ pub fn expand_cmdsubst(
                         append_syntax_error!(errors, slice_begin + bad_pos, "Invalid index value");
                     }
                 }
-                return ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap());
+                return ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into());
             }
         };
 
@@ -1347,7 +1347,7 @@ impl<'a, 'b, 'c> Expander<'a, 'b, 'c> {
                             "command substitutions not allowed in command position. Try var=(your-cmd) $var ..."
                         );
                     }
-                    return ExpandResult::make_error(STATUS_EXPAND_ERROR.unwrap());
+                    return ExpandResult::make_error(STATUS_EXPAND_ERROR.get().into());
                 }
             }
         } else {

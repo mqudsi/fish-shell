@@ -145,13 +145,13 @@ impl<'args> StringSubCommand<'args> for Split<'args> {
         optind: &mut usize,
         args: &[&'args wstr],
         streams: &mut IoStreams,
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         if self.is_split0 {
             return STATUS_CMD_OK;
         }
         let Some(arg) = args.get(*optind).copied() else {
             string_error!(streams, BUILTIN_ERR_ARG_COUNT0, args[0]);
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         };
         *optind += 1;
         self.sep = arg;
@@ -164,14 +164,14 @@ impl<'args> StringSubCommand<'args> for Split<'args> {
         streams: &mut IoStreams,
         optind: &mut usize,
         args: &[&'args wstr],
-    ) -> Option<libc::c_int> {
+    ) -> Result<Option<()>, NonZeroU8> {
         if self.fields.is_empty() && self.allow_empty {
             streams.err.append(wgettext_fmt!(
                 BUILTIN_ERR_COMBO2,
                 args[0],
                 wgettext!("--allow-empty is only valid with --fields")
             ));
-            return STATUS_INVALID_ARGS;
+            return Err(STATUS_INVALID_ARGS);
         }
 
         let sep = self.sep;
@@ -227,7 +227,7 @@ impl<'args> StringSubCommand<'args> for Split<'args> {
             return if split_count > arg_count {
                 STATUS_CMD_OK
             } else {
-                STATUS_CMD_ERROR
+Err(STATUS_CMD_ERROR)
             };
         }
 
@@ -251,7 +251,7 @@ impl<'args> StringSubCommand<'args> for Split<'args> {
                     for field in self.fields.iter() {
                         // we already have checked the start
                         if *field >= splits.len() {
-                            return STATUS_CMD_ERROR;
+                            return Err(STATUS_CMD_ERROR);
                         }
                     }
                 }
@@ -275,7 +275,7 @@ impl<'args> StringSubCommand<'args> for Split<'args> {
         return if split_count > arg_count {
             STATUS_CMD_OK
         } else {
-            STATUS_CMD_ERROR
+Err(STATUS_CMD_ERROR)
         };
     }
 }
