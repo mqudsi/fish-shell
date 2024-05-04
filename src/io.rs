@@ -943,7 +943,7 @@ impl BufferedOutputStream {
     }
     fn flush_and_check_error(&mut self) -> Result<(), NonZeroU8> {
         if self.buffer.discarded() {
-            return Err(STATUS_READ_TOO_MUCH)
+            return Err(STATUS_READ_TOO_MUCH);
         }
         Ok(())
     }

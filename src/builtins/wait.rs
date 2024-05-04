@@ -94,7 +94,11 @@ fn is_completed(wh: &WaitHandleRef) -> bool {
 /// Wait for the given wait handles to be marked as completed.
 /// If \p any_flag is set, wait for the first one; otherwise wait for all.
 /// \return a status code.
-fn wait_for_completion(parser: &Parser, whs: &[WaitHandleRef], any_flag: bool) -> Result<Option<()>, NonZeroU8> {
+fn wait_for_completion(
+    parser: &Parser,
+    whs: &[WaitHandleRef],
+    any_flag: bool,
+) -> Result<Option<()>, NonZeroU8> {
     if whs.is_empty() {
         return STATUS_CMD_OK;
     }
@@ -126,7 +130,11 @@ fn wait_for_completion(parser: &Parser, whs: &[WaitHandleRef], any_flag: bool) -
     }
 }
 
-pub fn wait(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn wait(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let mut any_flag = false; // flag for -n option

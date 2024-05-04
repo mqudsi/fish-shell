@@ -6,7 +6,11 @@ use crate::parser::BlockType;
 use crate::wcstringutil::join_strings;
 use libc::{STDERR_FILENO, STDOUT_FILENO};
 
-pub fn eval(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn eval(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let argc = args.len();
     if argc <= 1 {
         return STATUS_CMD_OK;

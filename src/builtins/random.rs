@@ -8,7 +8,11 @@ use std::sync::Mutex;
 
 static RNG: Lazy<Mutex<SmallRng>> = Lazy::new(|| Mutex::new(SmallRng::from_entropy()));
 
-pub fn random(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn random(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let print_hints = false;

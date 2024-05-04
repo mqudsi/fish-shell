@@ -135,7 +135,11 @@ where
 ///
 /// Bash only respects `-n` if it's the first argument. We'll do the same. We also support a new,
 /// fish specific, option `-s` to mean "no spaces".
-pub fn echo(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn echo(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let (opts, optind) = parse_options(args, parser, streams)?;
 
     // The special character \c can be used to indicate no more output.

@@ -46,7 +46,11 @@ fn send_to_bg(
 }
 
 /// Builtin for putting a job in the background.
-pub fn bg(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn bg(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let opts = HelpOnlyCmdOpts::parse(args, parser, streams)?;
 

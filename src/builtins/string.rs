@@ -219,7 +219,7 @@ impl StringError {
     }
 
     fn retval(&self) -> Result<Option<()>, NonZeroU8> {
-Err(STATUS_INVALID_ARGS)
+        Err(STATUS_INVALID_ARGS)
     }
 }
 
@@ -274,7 +274,11 @@ fn arguments<'iter, 'args>(
 }
 
 /// The string builtin, for manipulating strings.
-pub fn string(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn string(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let argc = args.len();
 

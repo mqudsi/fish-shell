@@ -312,7 +312,7 @@ fn run_command_list(parser: &Parser, cmds: &[OsString]) -> i32 {
 
     match retval {
         Ok(()) => 0,
-        Err(n) => n.get().into()
+        Err(n) => n.get().into(),
     }
 }
 

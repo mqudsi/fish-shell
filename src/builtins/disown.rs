@@ -3,9 +3,7 @@
 use super::prelude::*;
 
 use crate::proc::{add_disowned_job, Job};
-use crate::{
-    wutil::{wgettext_fmt},
-};
+use crate::wutil::wgettext_fmt;
 use libc::SIGCONT;
 
 /// Helper for builtin_disown.
@@ -39,7 +37,11 @@ fn disown_job(cmd: &wstr, streams: &mut IoStreams, j: &Job) {
 }
 
 /// Builtin for removing jobs from the job list.
-pub fn disown(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn disown(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let opts = HelpOnlyCmdOpts::parse(args, parser, streams)?;
 

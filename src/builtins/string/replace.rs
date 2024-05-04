@@ -108,7 +108,7 @@ impl<'args> StringSubCommand<'args> for Replace<'args> {
         if replace_count > 0 {
             STATUS_CMD_OK
         } else {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         }
     }
 }

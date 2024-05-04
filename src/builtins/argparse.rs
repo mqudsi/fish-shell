@@ -156,7 +156,10 @@ fn check_for_mutually_exclusive_flags(
 
 // This should be called after all the option specs have been parsed. At that point we have enough
 // information to parse the values associated with any `--exclusive` flags.
-fn parse_exclusive_args(opts: &mut ArgParseCmdOpts, streams: &mut IoStreams) -> Result<Option<()>, NonZeroU8> {
+fn parse_exclusive_args(
+    opts: &mut ArgParseCmdOpts,
+    streams: &mut IoStreams,
+) -> Result<Option<()>, NonZeroU8> {
     for raw_xflags in &opts.raw_exclusive_flags {
         let xflags = split_string(raw_xflags, ',');
         if xflags.len() < 2 {
@@ -762,7 +765,7 @@ fn argparse_parse_flags<'args>(
                     args_read[w.woptind - 1],
                     false,
                 );
-                return Err(STATUS_INVALID_ARGS)
+                return Err(STATUS_INVALID_ARGS);
             }
             '?' => {
                 // It's not a recognized flag. See if it's an implicit int flag.
@@ -912,7 +915,11 @@ fn set_argparse_result_vars(vars: &EnvStack, opts: &ArgParseCmdOpts) {
 /// an external command also means its output has to be in a form that can be eval'd. Because our
 /// version is a builtin it can directly set variables local to the current scope (e.g., a
 /// function). It doesn't need to write anything to stdout that then needs to be eval'd.
-pub fn argparse(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn argparse(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let argc = args.len();
 

@@ -2,12 +2,10 @@ use crate::io::IoChain;
 use crate::tests::prelude::*;
 use crate::wchar::prelude::*;
 
-
 #[test]
 #[serial]
 fn test_string() {
     test_init();
-    use {STATUS_CMD_ERROR as SCE, STATUS_INVALID_ARGS as SIA};
     use crate::builtins::string::string;
     use crate::common::escape;
     use crate::future_feature_flags::{scoped_test, FeatureFlag};
@@ -15,6 +13,7 @@ fn test_string() {
     use crate::parser::Parser;
     use crate::tests::prelude::*;
     use crate::wchar::prelude::*;
+    use {STATUS_CMD_ERROR as SCE, STATUS_INVALID_ARGS as SIA};
 
     // Redefine some constants to simplify test harness
     const STATUS_CMD_OK: u8 = 0;
@@ -38,8 +37,7 @@ fn test_string() {
         let mut streams = IoStreams::new(&mut outs, &mut errs, &io_chain);
         streams.stdin_is_directly_redirected = false; // read from argv instead of stdin
 
-        let rc = match string(parser, &mut streams, args.as_mut_slice())
-        {
+        let rc = match string(parser, &mut streams, args.as_mut_slice()) {
             Ok(_) => 0,
             Err(nz) => nz.get(),
         };
@@ -53,8 +51,7 @@ fn test_string() {
 
         // Check return code after so we get a chance to identify the difference first
         assert_eq!(
-            expected_rc,
-            rc,
+            expected_rc, rc,
             "string builtin returned unexpected return code"
         );
     }

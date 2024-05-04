@@ -113,7 +113,11 @@ fn parse_cmd_opts<'args>(
     STATUS_CMD_OK
 }
 
-pub fn functions(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn functions(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
 
     let mut opts = FunctionsCmdOpts::default();

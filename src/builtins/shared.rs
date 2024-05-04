@@ -408,7 +408,7 @@ pub fn builtin_run(parser: &Parser, argv: &mut [&wstr], streams: &mut IoStreams)
     // handle displaying help for it here.
     if argv.len() == 2 && parse_util_argument_is_help(argv[1]) && cmd_needs_help(argv[0]) {
         builtin_print_help(parser, streams, argv[0]);
-        return ().into()
+        return ().into();
     }
 
     let Some(builtin) = builtin_lookup(argv[0]) else {

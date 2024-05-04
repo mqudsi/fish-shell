@@ -994,7 +994,11 @@ mod test_expressions {
 /// Evaluate a conditional expression given the arguments. For POSIX conformance this
 /// supports a more limited range of functionality.
 /// Return status is the final shell status, i.e. 0 for true, 1 for false and 2 for error.
-pub fn test(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn test(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     // The first argument should be the name of the command ('test').
     if argv.is_empty() {
         return Err(STATUS_INVALID_ARGS);
@@ -1033,7 +1037,7 @@ pub fn test(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Res
     } else if argc == 1 {
         // Per 1003.1, exit true if the arg is non-empty.
         return if args[0].is_empty() {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         } else {
             STATUS_CMD_OK
         };
@@ -1065,6 +1069,6 @@ Err(STATUS_CMD_ERROR)
     if result {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }

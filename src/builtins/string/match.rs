@@ -134,7 +134,7 @@ impl<'args> StringSubCommand<'args> for Match<'args> {
         if match_count > 0 {
             STATUS_CMD_OK
         } else {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         }
     }
 }

@@ -169,7 +169,7 @@ impl StringSubCommand<'_> for Repeat {
         }
 
         if all_empty {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         } else {
             STATUS_CMD_OK
         }

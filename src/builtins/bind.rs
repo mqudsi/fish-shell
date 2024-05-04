@@ -561,6 +561,10 @@ impl BuiltinBind {
     }
 }
 
-pub fn bind(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn bind(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     BuiltinBind::new().bind(parser, streams, args)
 }

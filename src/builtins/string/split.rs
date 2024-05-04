@@ -227,7 +227,7 @@ impl<'args> StringSubCommand<'args> for Split<'args> {
             return if split_count > arg_count {
                 STATUS_CMD_OK
             } else {
-Err(STATUS_CMD_ERROR)
+                Err(STATUS_CMD_ERROR)
             };
         }
 
@@ -275,7 +275,7 @@ Err(STATUS_CMD_ERROR)
         return if split_count > arg_count {
             STATUS_CMD_OK
         } else {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         };
     }
 }

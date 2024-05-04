@@ -44,7 +44,11 @@ fn parse_options(
 }
 
 /// Function for handling the return builtin.
-pub fn r#return(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn r#return(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let retval = match parse_return_value(args, parser, streams)? {
         None => return STATUS_CMD_OK, // early exit
         Some(code) => code,
@@ -59,8 +63,8 @@ pub fn r#return(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) ->
     // Note in Rust, dividend % divisor has the same sign as the dividend.
     let retval = if retval < 0 {
         (256 - (retval % 256).abs()) as u8
-        } else {
-            (retval % 256) as u8
+    } else {
+        (retval % 256) as u8
     };
     let result = match retval {
         0 => STATUS_CMD_OK,

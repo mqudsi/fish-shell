@@ -93,7 +93,7 @@ impl<'args> StringSubCommand<'args> for Join<'args> {
         if nargs > 1 {
             STATUS_CMD_OK
         } else {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         }
     }
 }

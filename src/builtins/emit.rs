@@ -1,7 +1,11 @@
 use super::prelude::*;
 use crate::event;
 
-pub fn emit(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn emit(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
 
     let opts = HelpOnlyCmdOpts::parse(argv, parser, streams)?;

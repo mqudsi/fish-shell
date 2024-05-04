@@ -116,7 +116,11 @@ const LONG_OPTIONS: &[woption] = &[
 ];
 
 /// set_color builtin.
-pub fn set_color(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn set_color(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     // Variables used for parsing the argument list.
     let argc = argv.len();
 

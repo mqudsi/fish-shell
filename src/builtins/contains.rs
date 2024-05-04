@@ -46,7 +46,11 @@ fn parse_options(
 
 /// Implementation of the builtin contains command, used to check if a specified string is part of
 /// a list.
-pub fn contains(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn contains(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
 
     let (opts, optind) = parse_options(args, parser, streams)?;

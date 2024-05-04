@@ -127,7 +127,11 @@ const LONG_OPTIONS: &[woption] = &[
 ];
 
 /// The jobs builtin. Used for printing running jobs. Defined in builtin_jobs.c.
-pub fn jobs(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn jobs(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = argv[0];
     let argc = argv.len();
     let mut found = false;

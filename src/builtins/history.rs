@@ -227,7 +227,11 @@ fn parse_cmd_opts(
 }
 
 /// Manipulate history of interactive commands executed by the user.
-pub fn history(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn history(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let mut opts = HistoryCmdOpts::default();
     let mut optind = 0;
     parse_cmd_opts(&mut opts, &mut optind, args, parser, streams)?;

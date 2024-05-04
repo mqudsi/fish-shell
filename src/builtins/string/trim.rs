@@ -93,7 +93,7 @@ impl<'args> StringSubCommand<'args> for Trim<'args> {
         if ntrim > 0 {
             STATUS_CMD_OK
         } else {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         }
     }
 }

@@ -10,7 +10,11 @@ use libc::{STDIN_FILENO, TCSADRAIN};
 use super::prelude::*;
 
 /// Builtin for putting a job in the foreground.
-pub fn fg(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn fg(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let opts = HelpOnlyCmdOpts::parse(argv, parser, streams)?;
 
     let cmd = argv[0];

@@ -14,7 +14,11 @@ use super::prelude::*;
 
 /// The  source builtin, sometimes called `.`. Evaluates the contents of a file in the current
 /// context.
-pub fn source(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn source(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let argc = args.len();
     let opts = HelpOnlyCmdOpts::parse(args, parser, streams)?;
     let cmd = args[0];

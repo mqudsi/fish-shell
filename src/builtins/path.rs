@@ -398,15 +398,23 @@ fn path_transform(
     if n_transformed > 0 {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }
 
-fn path_basename(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_basename(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     path_transform(parser, streams, args, |s| wbasename(s).to_owned())
 }
 
-fn path_dirname(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_dirname(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     path_transform(parser, streams, args, |s| wdirname(s).to_owned())
 }
 
@@ -418,11 +426,19 @@ fn normalize_help(path: &wstr) -> WString {
     np
 }
 
-fn path_normalize(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_normalize(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     path_transform(parser, streams, args, normalize_help)
 }
 
-fn path_mtime(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_mtime(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let mut opts = Options::default();
     opts.relative_valid = true;
     let mut optind = 0;
@@ -464,7 +480,7 @@ fn path_mtime(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> R
     if n_transformed > 0 {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }
 
@@ -506,7 +522,11 @@ fn test_find_extension() {
     }
 }
 
-fn path_extension(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_extension(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let mut opts = Options::default();
     let mut optind = 0;
     let retval = parse_opts(&mut opts, &mut optind, 0, args, parser, streams);
@@ -539,7 +559,7 @@ fn path_extension(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) 
     if n_transformed > 0 {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }
 
@@ -588,11 +608,15 @@ fn path_change_extension(
     if n_transformed > 0 {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }
 
-fn path_resolve(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_resolve(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let mut opts = Options::default();
     let mut optind = 0;
     let retval = parse_opts(&mut opts, &mut optind, 0, args, parser, streams);
@@ -653,11 +677,15 @@ fn path_resolve(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) ->
     if n_transformed > 0 {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }
 
-fn path_sort(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_sort(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let mut opts = Options::default();
     opts.reverse_valid = true;
     opts.unique_valid = true;
@@ -901,20 +929,32 @@ fn path_filter_maybe_is(
     if n_transformed > 0 {
         STATUS_CMD_OK
     } else {
-Err(STATUS_CMD_ERROR)
+        Err(STATUS_CMD_ERROR)
     }
 }
 
-fn path_filter(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_filter(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     path_filter_maybe_is(parser, streams, args, false)
 }
 
-fn path_is(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn path_is(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     path_filter_maybe_is(parser, streams, args, true)
 }
 
 /// The path builtin, for handling paths.
-pub fn path(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn path(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let argc = args.len();
 

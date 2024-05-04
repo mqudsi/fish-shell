@@ -276,7 +276,12 @@ const READ_CHUNK_SIZE: usize = 128;
 /// of chars.
 ///
 /// Returns an exit status.
-fn read_in_chunks(fd: RawFd, buff: &mut WString, split_null: bool, do_seek: bool) -> Result<Option<()>, NonZeroU8> {
+fn read_in_chunks(
+    fd: RawFd,
+    buff: &mut WString,
+    split_null: bool,
+    do_seek: bool,
+) -> Result<Option<()>, NonZeroU8> {
     let mut exit_res = STATUS_CMD_OK;
     let mut narrow_buff = vec![];
     let mut eof = false;
@@ -537,7 +542,11 @@ fn validate_read_args(
 }
 
 /// The read builtin. Reads from stdin and stores the values in environment variables.
-pub fn read(parser: &Parser, streams: &mut IoStreams, argv: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn read(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    argv: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let mut buff = WString::new();
     let mut exit_res;
 

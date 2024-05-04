@@ -63,7 +63,7 @@ fn test_test_brackets() {
     let args1 = &mut [L!("["), L!("foo")];
     assert_eq!(
         builtin_test(parser, &mut streams, args1),
-Err(STATUS_INVALID_ARGS)
+        Err(STATUS_INVALID_ARGS)
     );
 
     let args2 = &mut [L!("["), L!("foo"), L!("]")];
@@ -72,7 +72,7 @@ Err(STATUS_INVALID_ARGS)
     let args3 = &mut [L!("["), L!("foo"), L!("]"), L!("bar")];
     assert_eq!(
         builtin_test(parser, &mut streams, args3),
-Err(STATUS_INVALID_ARGS)
+        Err(STATUS_INVALID_ARGS)
     );
 }
 

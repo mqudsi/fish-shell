@@ -579,7 +579,7 @@ fn query(
     // No variables given, this is an error.
     // 255 is the maximum return code we allow.
     if args.is_empty() {
-        return Err(NonZeroU8::MAX)
+        return Err(NonZeroU8::MAX);
     }
 
     for arg in args {
@@ -675,7 +675,12 @@ fn show_scope(var_name: &wstr, scope: EnvMode, streams: &mut IoStreams, vars: &d
 }
 
 /// Show mode. Show information about the named variable(s).
-fn show(cmd: &wstr, parser: &Parser, streams: &mut IoStreams, args: &[&wstr]) -> Result<Option<()>, NonZeroU8> {
+fn show(
+    cmd: &wstr,
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &[&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let vars = parser.vars();
     if args.is_empty() {
         // show all vars
@@ -963,7 +968,11 @@ fn set_internal(
 }
 
 /// The set builtin creates, updates, and erases (removes, deletes) variables.
-pub fn set(parser: &Parser, streams: &mut IoStreams, args: &mut [&wstr]) -> Result<Option<()>, NonZeroU8> {
+pub fn set(
+    parser: &Parser,
+    streams: &mut IoStreams,
+    args: &mut [&wstr],
+) -> Result<Option<()>, NonZeroU8> {
     let cmd = args[0];
     let (opts, optind) = match Options::parse(cmd, args, parser, streams)? {
         None => return STATUS_CMD_OK, // early exit

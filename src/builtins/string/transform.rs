@@ -43,7 +43,7 @@ impl StringSubCommand<'_> for Transform {
         if n_transformed > 0 {
             STATUS_CMD_OK
         } else {
-Err(STATUS_CMD_ERROR)
+            Err(STATUS_CMD_ERROR)
         }
     }
 }
