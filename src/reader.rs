@@ -948,6 +948,16 @@ pub fn reader_showing_suggestion(parser: &Parser) -> bool {
     }
     if let Some(data) = current_data() {
         let reader = Reader { parser, data };
+        // Work around the fact that autosuggestions happen asynchronously and we don't share state
+        // with the actual Reader used by the shell, so while a suggestion might have already been
+        // populated at the tty, we still need time for our background thread to populate one here.
+        // (We are blocking in a call to `commandline --showing-suggestion` here. We could use a
+        // condition variable instead of this loop, but this is incredibly far from the hot path,
+        // never called in a stock fish installation, and expected to generally never end up
+        // actually calling yield_now() except under CI or on really slow machines.)
+        while reader.autosuggestion.is_empty() && !reader.in_flight_autosuggest_request.is_empty() {
+            std::thread::yield_now();
+        }
         !reader.autosuggestion.is_empty()
     } else {
         false
